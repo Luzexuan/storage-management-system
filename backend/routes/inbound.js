@@ -4,7 +4,7 @@ const db = require('../config/database');
 const { verifyToken, verifyActiveUser } = require('../middleware/auth');
 const { logOperation, getClientIP } = require('../utils/logger');
 
-// 获取所有入库记录
+// Get all inbound records
 router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
   const { itemId, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -45,21 +45,21 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取入库记录失败:', error);
-    res.status(500).json({ error: '获取入库记录失败' });
+    console.error('Failed to get inbound records:', error);
+    res.status(500).json({ error: 'Failed to get inbound records' });
   }
 });
 
-// 创建入库记录（初次入库或归还）
+// Create inbound record (initial or return)
 router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   const { itemId, quantity, inboundType, relatedOutboundId, remarks } = req.body;
 
   if (!itemId || !quantity || quantity <= 0) {
-    return res.status(400).json({ error: '物品ID和数量必须提供且数量大于0' });
+    return res.status(400).json({ error: 'Item ID and quantity are required and quantity must be greater than 0' });
   }
 
   if (!['initial', 'return'].includes(inboundType)) {
-    return res.status(400).json({ error: '入库类型必须是initial或return' });
+    return res.status(400).json({ error: 'Inbound type must be initial or return' });
   }
 
   const connection = await db.getConnection();
@@ -67,7 +67,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // 获取物品信息
+    // Get item information
     const [items] = await connection.execute(
       'SELECT * FROM items WHERE item_id = ? FOR UPDATE',
       [itemId]
@@ -75,19 +75,19 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     if (items.length === 0) {
       await connection.rollback();
-      return res.status(404).json({ error: '物品不存在' });
+      return res.status(404).json({ error: 'Item not found' });
     }
 
     const item = items[0];
 
-    // 如果是归还，需要验证关联的出库记录
+    // If return type, validate related outbound record
     if (inboundType === 'return') {
       if (!relatedOutboundId) {
         await connection.rollback();
-        return res.status(400).json({ error: '归还时必须提供关联的出库记录ID' });
+        return res.status(400).json({ error: 'Related outbound ID is required for return type' });
       }
 
-      // 检查出库记录
+      // Check outbound record
       const [outboundRecords] = await connection.execute(
         'SELECT * FROM outbound_records WHERE outbound_id = ?',
         [relatedOutboundId]
@@ -95,15 +95,15 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
 
       if (outboundRecords.length === 0) {
         await connection.rollback();
-        return res.status(404).json({ error: '关联的出库记录不存在' });
+        return res.status(404).json({ error: 'Related outbound record not found' });
       }
 
       if (outboundRecords[0].is_returned) {
         await connection.rollback();
-        return res.status(400).json({ error: '该出库记录已标记为归还' });
+        return res.status(400).json({ error: 'This outbound record is already marked as returned' });
       }
 
-      // 更新出库记录
+      // Update outbound record
       await connection.execute(
         `UPDATE outbound_records
          SET is_returned = TRUE, actual_return_date = CURDATE()
@@ -112,7 +112,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       );
     }
 
-    // 插入入库记录
+    // Insert inbound record
     const [result] = await connection.execute(
       `INSERT INTO inbound_records
        (item_id, unique_code, quantity, inbound_type, related_outbound_id, operator_id, remarks)
@@ -120,7 +120,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       [itemId, item.unique_code, quantity, inboundType, relatedOutboundId || null, req.user.userId, remarks || null]
     );
 
-    // 更新物品库存
+    // Update item inventory
     const newQuantity = item.current_quantity + quantity;
     const newStatus = newQuantity > 0 ? 'in_stock' : 'out_of_stock';
 
@@ -133,7 +133,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       [newQuantity, quantity, newStatus, itemId]
     );
 
-    // 记录日志
+    // Log operation
     await logOperation({
       operationType: 'inbound',
       operatorId: req.user.userId,
@@ -152,20 +152,20 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
     await connection.commit();
 
     res.status(201).json({
-      message: '入库成功',
+      message: 'Inbound successful',
       inboundId: result.insertId,
       newQuantity
     });
   } catch (error) {
     await connection.rollback();
-    console.error('入库失败:', error);
-    res.status(500).json({ error: '入库失败' });
+    console.error('Inbound failed:', error);
+    res.status(500).json({ error: 'Inbound failed' });
   } finally {
     connection.release();
   }
 });
 
-// 获取单条入库记录详情
+// Get single inbound record details
 router.get('/:inboundId', verifyToken, verifyActiveUser, async (req, res) => {
   const { inboundId } = req.params;
 
@@ -181,22 +181,22 @@ router.get('/:inboundId', verifyToken, verifyActiveUser, async (req, res) => {
     );
 
     if (records.length === 0) {
-      return res.status(404).json({ error: '入库记录不存在' });
+      return res.status(404).json({ error: 'Inbound record not found' });
     }
 
     res.json({ record: records[0] });
   } catch (error) {
-    console.error('获取入库记录详情失败:', error);
-    res.status(500).json({ error: '获取入库记录详情失败' });
+    console.error('Failed to get inbound record details:', error);
+    res.status(500).json({ error: 'Failed to get inbound record details' });
   }
 });
 
-// 批量归还（快速归还功能）
+// Batch return (quick return feature)
 router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => {
   const { outboundIds, remarks } = req.body;
 
   if (!outboundIds || !Array.isArray(outboundIds) || outboundIds.length === 0) {
-    return res.status(400).json({ error: '请至少选择一个借用记录进行归还' });
+    return res.status(400).json({ error: 'Please select at least one borrowed record to return' });
   }
 
   const connection = await db.getConnection();
@@ -208,45 +208,45 @@ router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => 
 
     for (const outboundId of outboundIds) {
       try {
-        // 获取出库记录
+        // Get outbound record
         const [outboundRecords] = await connection.execute(
           'SELECT * FROM outbound_records WHERE outbound_id = ? FOR UPDATE',
           [outboundId]
         );
 
         if (outboundRecords.length === 0) {
-          errors.push({ outboundId, error: '出库记录不存在' });
+          errors.push({ outboundId, error: 'Outbound record not found' });
           continue;
         }
 
         const outbound = outboundRecords[0];
 
-        // 检查是否属于当前用户
+        // Check if belongs to current user
         if (outbound.operator_id !== req.user.userId) {
-          errors.push({ outboundId, error: '无权归还此物品' });
+          errors.push({ outboundId, error: 'No permission to return this item' });
           continue;
         }
 
-        // 检查是否已归还
+        // Check if already returned
         if (outbound.is_returned) {
-          errors.push({ outboundId, error: '该物品已归还' });
+          errors.push({ outboundId, error: 'Item already returned' });
           continue;
         }
 
-        // 获取物品信息
+        // Get item information
         const [items] = await connection.execute(
           'SELECT * FROM items WHERE item_id = ? FOR UPDATE',
           [outbound.item_id]
         );
 
         if (items.length === 0) {
-          errors.push({ outboundId, error: '物品不存在' });
+          errors.push({ outboundId, error: 'Item not found' });
           continue;
         }
 
         const item = items[0];
 
-        // 插入入库记录
+        // Insert inbound record
         const [inboundResult] = await connection.execute(
           `INSERT INTO inbound_records
            (item_id, unique_code, quantity, inbound_type, related_outbound_id, operator_id, remarks)
@@ -254,7 +254,7 @@ router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => 
           [item.item_id, item.unique_code, outbound.quantity, outboundId, req.user.userId, remarks || null]
         );
 
-        // 更新物品库存
+        // Update item inventory
         const newQuantity = item.current_quantity + outbound.quantity;
         const newStatus = newQuantity > 0 ? 'in_stock' : 'out_of_stock';
 
@@ -267,7 +267,7 @@ router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => 
           [newQuantity, outbound.quantity, newStatus, item.item_id]
         );
 
-        // 更新出库记录
+        // Update outbound record
         await connection.execute(
           `UPDATE outbound_records
            SET is_returned = TRUE, actual_return_date = CURDATE()
@@ -275,7 +275,7 @@ router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => 
           [outboundId]
         );
 
-        // 记录日志
+        // Log operation
         await logOperation({
           operationType: 'inbound',
           operatorId: req.user.userId,
@@ -300,7 +300,7 @@ router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => 
           success: true
         });
       } catch (error) {
-        console.error(`处理出库记录 ${outboundId} 失败:`, error);
+        console.error(`Failed to process outbound record ${outboundId}:`, error);
         errors.push({ outboundId, error: error.message });
       }
     }
@@ -308,14 +308,14 @@ router.post('/batch-return', verifyToken, verifyActiveUser, async (req, res) => 
     await connection.commit();
 
     res.json({
-      message: `成功归还 ${results.length} 件物品${errors.length > 0 ? `，${errors.length} 件失败` : ''}`,
+      message: `Successfully returned ${results.length} items${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
       results,
       errors
     });
   } catch (error) {
     await connection.rollback();
-    console.error('批量归还失败:', error);
-    res.status(500).json({ error: '批量归还失败' });
+    console.error('Batch return failed:', error);
+    res.status(500).json({ error: 'Batch return failed' });
   } finally {
     connection.release();
   }
