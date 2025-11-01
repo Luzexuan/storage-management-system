@@ -3,7 +3,8 @@
     "allow": [
       "Bash(chmod:*)",
       "Bash(node -e:*)",
-      "Read(//c/Users/17700/**)"
+      "Read(//c/Users/17700/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

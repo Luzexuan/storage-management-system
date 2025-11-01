@@ -1,6 +1,26 @@
 仓库管理系统 - 更新日志
 ====================================
 
+版本 1.2.2 - 2025-11-01
+------------------------
+
+【修复问题】
+1. ✅ 修复 API 请求参数导致的 500 错误
+   - 问题：SQL 参数类型错误 "Incorrect arguments to mysqld_stmt_execute"
+   - 原因：parseInt(undefined) 返回 NaN，导致 MySQL prepared statement 失败
+   - 修复：将 parseInt() 改为 Number() 并添加默认值
+
+2. ✅ 修复字符编码问题导致代码执行失败
+   - 问题：中文注释在 Ubuntu 服务器上 UTF-8 编码损坏，导致 JavaScript 解析错误
+   - 修复：将关键位置的中文注释替换为 ASCII 英文注释
+
+【代码变更】
+1. backend/routes/items.js:45 - 修复参数转换
+2. backend/routes/inbound.js:34 - 修复参数转换
+3. backend/routes/outbound.js:39 - 修复参数转换
+4. backend/routes/logs.js:61 - 修复参数转换
+5. 所有路由文件 - 替换关键位置的中文注释为英文
+
 版本 1.2.1 - 2025-10-31
 ------------------------
 

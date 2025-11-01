@@ -34,7 +34,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
     const [countResult] = await db.execute(countSql, params);
     const total = countResult[0].total;
 
-    // 获取分页数据
+    // Get paginated data
     sql += ' ORDER BY obr.outbound_time DESC LIMIT ? OFFSET ?';
     params.push(Number(limit) || 20, Number(offset) || 0);
 
