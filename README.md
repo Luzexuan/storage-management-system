@@ -2,7 +2,7 @@
 
 一个功能完整的仓库管理系统，支持物品入库/出库、快速归还、操作追溯、分类管理等功能。
 
-**版本**: 1.2.0 | **技术栈**: Node.js + Express + MySQL | **界面**: 完整图形化界面
+**版本**: 1.2.1 | **技术栈**: Node.js + Express + MySQL | **界面**: 完整图形化界面
 
 ---
 
@@ -736,14 +736,51 @@ A:
    sudo ufw allow 8082/tcp
    ```
 
-**Q18: 从旧版本（v1.1.0）升级到 v1.2.0 需要注意什么？**
+**Q18: 从旧版本升级需要注意什么？**
 
 A:
+
+**从 v1.2.0 升级到 v1.2.1**（⚠️ 需要数据库迁移）：
+
+1. 拉取最新代码：
+   ```bash
+   cd /var/www/storage-management
+   git pull origin main
+   ```
+
+2. **执行数据库迁移**（必须！）：
+   ```bash
+   mysql -u storage_user -p storage_management < database/migrations/001_add_operation_types.sql
+   ```
+
+   输入数据库密码后，应该看到：
+   ```
+   Query OK, 0 rows affected
+   ```
+
+3. 零停机重启后端：
+   ```bash
+   pm2 reload ecosystem.config.js
+   ```
+
+4. 刷新浏览器（清除缓存）
+
+**从 v1.1.0 升级到 v1.2.0**：
 1. 拉取最新代码：`git pull origin main`
 2. 安装依赖（如有新增）：`cd backend && npm install`
 3. 零停机重启：`pm2 reload ecosystem.config.js`
 4. 刷新浏览器（清除缓存）
 5. 无需数据库迁移
+
+**Q19: 如何查看数据库迁移历史？**
+
+A: 查看 `database/migrations/` 目录：
+```bash
+ls -la database/migrations/
+```
+
+当前迁移记录：
+- `001_add_operation_types.sql` - 添加 update_profile 和 change_password 操作类型（v1.2.1）
 
 ---
 
@@ -795,7 +832,9 @@ sudo systemctl reload nginx    # 重载配置（不中断服务）
 ```
 storage_management/
 ├── database/
-│   └── schema.sql              # 数据库表结构
+│   ├── schema.sql              # 数据库表结构
+│   └── migrations/             # 数据库迁移脚本
+│       └── 001_add_operation_types.sql
 ├── backend/
 │   ├── routes/                 # API 路由
 │   │   ├── auth.js            # 登录注册
@@ -843,6 +882,6 @@ storage_management/
 
 ---
 
-**版本**: 1.2.0
-**最后更新**: 2025-10-29
+**版本**: 1.2.1
+**最后更新**: 2025-10-31
 **许可证**: MIT

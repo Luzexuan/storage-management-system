@@ -100,7 +100,7 @@ CREATE TABLE inbound_records (
 -- 操作日志表(追溯所有操作)
 CREATE TABLE operation_logs (
     log_id INT PRIMARY KEY AUTO_INCREMENT,
-    operation_type ENUM('inbound', 'outbound', 'edit_item', 'edit_category', 'user_register', 'user_approve', 'other') NOT NULL,
+    operation_type ENUM('inbound', 'outbound', 'edit_item', 'edit_category', 'user_register', 'user_approve', 'update_profile', 'change_password', 'other') NOT NULL,
     operator_id INT NOT NULL,
     target_type VARCHAR(50),  -- 操作对象类型: item, category, user等
     target_id INT,  -- 操作对象ID
