@@ -1,5 +1,9 @@
 // API 基础配置
-const API_BASE_URL = 'http://localhost:3000/api';
+// 自动检测环境：本地开发使用 localhost，生产环境使用相对路径
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3000/api'  // 本地开发
+  : '/api';  // 生产环境（通过 Nginx 代理）
+
 let authToken = localStorage.getItem('authToken');
 let currentUser = null;
 

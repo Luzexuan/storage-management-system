@@ -1,0 +1,161 @@
+仓库管理系统 - 部署注意事项
+====================================
+
+版本: 1.2.0
+更新时间: 2025-10-29
+
+====================================
+
+【重要变更】
+1. ✅ 前端 API 路径已修改为自动检测（支持生产环境部署）
+2. ✅ Nginx 端口改为 8081（避免与 Dify 等服务的 80 端口冲突）
+
+====================================
+
+【端口使用说明】
+
+服务              端口        说明
+----------------- ----------- ----------------------------------
+前端开发服务       8080        本地开发时使用（python -m http.server 8080）
+Nginx Web服务     8081        生产环境（避开80端口）
+后端 API          3000        Node.js 后端（PM2 管理）
+MySQL 数据库      3306        MySQL 默认端口（内网访问）
+
+【已避开的端口】
+- 80: Dify 服务
+- 8080: 常用开发端口
+
+====================================
+
+【本地开发】
+
+1. 启动后端（在 backend 目录）:
+   npm start
+
+   -> 监听: http://localhost:3000
+
+2. 启动前端（在 frontend 目录）:
+   python -m http.server 8080
+
+   -> 访问: http://localhost:8080
+   -> API 自动使用: http://localhost:3000/api
+
+====================================
+
+【生产环境部署】
+
+1. 部署到服务器后:
+   -> 访问: http://服务器IP:8081
+   -> API 自动使用: /api (通过 Nginx 代理到 localhost:3000)
+
+2. 防火墙配置:
+   sudo ufw allow 8081/tcp
+
+3. Nginx 监听端口:
+   listen 8081;
+
+4. 访问示例:
+   http://192.168.1.100:8081
+   http://your-domain.com:8081
+
+====================================
+
+【API 路径自动检测】
+
+前端代码（frontend/app.js）会自动检测环境：
+
+// 本地开发环境
+访问: http://localhost:8080
+检测: hostname === 'localhost'
+API: http://localhost:3000/api
+
+// 生产环境
+访问: http://服务器IP:8081
+检测: hostname !== 'localhost'
+API: /api (相对路径，通过 Nginx 代理)
+
+====================================
+
+【快速验证】
+
+1. 本地开发环境:
+   - 启动后端: cd backend && npm start
+   - 启动前端: cd frontend && python -m http.server 8080
+   - 访问: http://localhost:8080
+   - F12 查看 Network: 应该是 http://localhost:3000/api/...
+
+2. 生产环境:
+   - 部署完成后访问: http://服务器IP:8081
+   - F12 查看 Network: 应该是 http://服务器IP:8081/api/...
+
+====================================
+
+【常见问题】
+
+Q1: 如果想改用其他端口（如 8082）怎么办？
+
+A: 修改两个地方：
+   1. deployment/nginx.conf 中的 listen 8081 改为 listen 8082
+   2. 防火墙: sudo ufw allow 8082/tcp
+
+Q2: 为什么不用 80 端口？
+
+A: 80 端口已被 Dify 服务占用，使用 8081 避免冲突。
+
+Q3: 访问时提示 "Failed to fetch"？
+
+A: 检查：
+   - Nginx 是否启动: sudo systemctl status nginx
+   - PM2 是否启动: pm2 status
+   - 防火墙是否开放 8081: sudo ufw status
+   - 浏览器控制台 (F12) 查看具体错误
+
+Q4: 本地开发时访问不了后端？
+
+A: 确保：
+   - 后端正在运行: npm start
+   - 访问的是 localhost:8080，不是其他地址
+   - 检查 backend/.env 中的 PORT=3000
+
+====================================
+
+【部署检查清单】
+
+生产环境部署前：
+- [ ] 修改 .env 中的数据库密码
+- [ ] 修改 .env 中的 JWT_SECRET
+- [ ] 创建数据库并导入 schema.sql
+- [ ] 执行 npm run init-db
+- [ ] 启动 PM2: pm2 start deployment/ecosystem.config.js
+- [ ] 配置 Nginx（端口 8081）
+- [ ] 开放防火墙端口 8081
+- [ ] 访问 http://服务器IP:8081 测试
+- [ ] 登录 admin/admin123 并立即修改密码
+
+====================================
+
+【升级注意】
+
+从旧版本（v1.1.0）升级到 v1.2.0:
+
+1. 拉取最新代码:
+   git pull origin main
+
+2. 重启服务:
+   pm2 reload ecosystem.config.js
+
+3. 刷新浏览器（清除缓存）
+
+4. 无需数据库迁移
+
+====================================
+
+【技术支持】
+
+如有问题，检查：
+1. 浏览器控制台 (F12 → Console)
+2. 浏览器网络 (F12 → Network)
+3. 后端日志: pm2 logs storage-management
+4. Nginx 日志: sudo tail -f /var/log/nginx/storage-management-error.log
+
+====================================

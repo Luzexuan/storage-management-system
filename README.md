@@ -344,15 +344,17 @@ sudo systemctl enable nginx
 #### 6. 配置防火墙
 
 ```bash
-sudo ufw allow 80/tcp      # HTTP
+sudo ufw allow 8081/tcp    # 仓库管理系统（避开80端口）
 sudo ufw allow 443/tcp     # HTTPS（可选）
 sudo ufw allow 22/tcp      # SSH
 sudo ufw enable
 ```
 
+> **端口说明**：使用 8081 端口，避免与其他服务冲突（如 Dify 占用 80 端口）
+
 #### 7. 访问系统
 
-打开浏览器访问：`http://你的服务器IP`
+打开浏览器访问：`http://你的服务器IP:8081`
 
 ### 在线升级（零停机）
 
