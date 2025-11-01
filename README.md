@@ -11,6 +11,7 @@
 - [快速开始](#快速开始)
 - [系统功能](#系统功能)
 - [生产部署](#生产部署)
+- [端口说明](#端口说明)
 - [常见问题](#常见问题)
 
 ---
@@ -406,6 +407,106 @@ pm2 status
 
 ---
 
+## 端口说明
+
+### 端口使用表
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 前端开发服务 | 8080 | 本地开发时使用（`python -m http.server 8080`） |
+| Nginx Web服务 | 8081 | 生产环境（避开80端口） |
+| 后端 API | 3000 | Node.js 后端（PM2 管理） |
+| MySQL 数据库 | 3306 | MySQL 默认端口（内网访问） |
+
+**已避开的端口**：
+- 80: Dify 服务
+- 8080: 常用开发端口
+
+### 本地开发环境
+
+**启动方式**：
+```bash
+# 1. 启动后端（在 backend 目录）
+npm start
+# → 监听: http://localhost:3000
+
+# 2. 启动前端（在 frontend 目录）
+python -m http.server 8080
+# → 访问: http://localhost:8080
+# → API 自动使用: http://localhost:3000/api
+```
+
+**API 路径检测**：
+- 访问地址：`http://localhost:8080`
+- 检测条件：`hostname === 'localhost'`
+- API 路径：`http://localhost:3000/api`（绝对路径）
+
+### 生产环境
+
+**访问方式**：
+```bash
+# 访问地址
+http://服务器IP:8081
+
+# API 路径（通过 Nginx 代理）
+http://服务器IP:8081/api → http://localhost:3000
+```
+
+**API 路径检测**：
+- 访问地址：`http://服务器IP:8081`
+- 检测条件：`hostname !== 'localhost'`
+- API 路径：`/api`（相对路径，由 Nginx 代理到 localhost:3000）
+
+### 修改端口
+
+**如果想改用其他端口（如 8082）**：
+
+1. 修改 Nginx 配置：
+   ```bash
+   sudo nano /etc/nginx/sites-available/storage-management
+   # 将 listen 8081 改为 listen 8082
+   ```
+
+2. 重启 Nginx：
+   ```bash
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+3. 更新防火墙：
+   ```bash
+   sudo ufw delete allow 8081/tcp
+   sudo ufw allow 8082/tcp
+   ```
+
+### 快速验证
+
+**本地开发环境验证**：
+1. 启动后端：`cd backend && npm start`
+2. 启动前端：`cd frontend && python -m http.server 8080`
+3. 访问：`http://localhost:8080`
+4. 按 F12 查看 Network：应该是 `http://localhost:3000/api/...`
+
+**生产环境验证**：
+1. 部署完成后访问：`http://服务器IP:8081`
+2. 按 F12 查看 Network：应该是 `http://服务器IP:8081/api/...`
+
+### 部署检查清单
+
+生产环境部署前请确认：
+
+- [ ] 修改 `.env` 中的数据库密码
+- [ ] 修改 `.env` 中的 `JWT_SECRET`
+- [ ] 创建数据库并导入 `schema.sql`
+- [ ] 执行 `npm run init-db`
+- [ ] 启动 PM2: `pm2 start deployment/ecosystem.config.js`
+- [ ] 配置 Nginx（端口 8081）
+- [ ] 开放防火墙端口 8081: `sudo ufw allow 8081/tcp`
+- [ ] 访问 `http://服务器IP:8081` 测试
+- [ ] 登录 `admin/admin123` 并立即修改密码
+
+---
+
 ## 常见问题
 
 ### 使用相关
@@ -511,7 +612,37 @@ A:
 A:
 - **最低配置**：1核CPU + 2GB内存
 - **推荐配置**：2核CPU + 8GB内存（可支持50-100人）
-- 2核8GB配置有4-8倍冗余，完全够用
+- 2核8GB配置有4-8倍冗余,完全够用
+
+**Q14: 为什么使用 8081 端口而不是 80 端口？**
+
+A: 80 端口已被其他服务（如 Dify）占用，使用 8081 端口可以避免冲突。如需使用其他端口，参考"端口说明"章节。
+
+**Q15: 访问时提示 "Failed to fetch" 或连接失败？**
+
+A: 检查以下几点：
+1. Nginx 是否启动：`sudo systemctl status nginx`
+2. PM2 后端是否运行：`pm2 status`
+3. 防火墙是否开放 8081 端口：`sudo ufw status`
+4. 浏览器控制台 (F12) 查看具体错误信息
+5. 检查 Network 标签中 API 请求的地址是否正确
+
+**Q16: 本地开发时访问不了后端 API？**
+
+A: 确保：
+1. 后端正在运行：`npm start`
+2. 访问的是 `localhost:8080`，不是其他地址
+3. 检查 `backend/.env` 中的 `PORT=3000`
+4. 浏览器 F12 → Network，确认请求的是 `http://localhost:3000/api`
+
+**Q17: 从旧版本（v1.1.0）升级到 v1.2.0 需要注意什么？**
+
+A:
+1. 拉取最新代码：`git pull origin main`
+2. 安装依赖（如有新增）：`cd backend && npm install`
+3. 零停机重启：`pm2 reload ecosystem.config.js`
+4. 刷新浏览器（清除缓存）
+5. 无需数据库迁移
 
 ---
 
