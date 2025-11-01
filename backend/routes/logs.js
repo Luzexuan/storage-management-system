@@ -58,7 +58,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     // 获取分页数据
     sql += ' ORDER BY ol.operation_time DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    params.push(Number(limit) || 50, Number(offset) || 0);
 
     const [logs] = await db.execute(sql, params);
 

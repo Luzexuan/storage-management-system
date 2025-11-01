@@ -31,7 +31,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     // 获取分页数据
     sql += ' ORDER BY ir.inbound_time DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    params.push(Number(limit) || 20, Number(offset) || 0);
 
     const [records] = await db.execute(sql, params);
 

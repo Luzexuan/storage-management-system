@@ -42,7 +42,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     // 获取分页数据
     sql += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    params.push(Number(limit) || 20, Number(offset) || 0);
 
     const [items] = await db.execute(sql, params);
 
