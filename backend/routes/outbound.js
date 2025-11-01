@@ -29,7 +29,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
       params.push(isReturned === 'true' ? 1 : 0);
     }
 
-    // 获取总数
+    // Get total count
     const countSql = sql.replace('SELECT obr.*, i.item_name, i.unique_code as item_code, u.username as operator_name', 'SELECT COUNT(*) as total');
     const [countResult] = await db.execute(countSql, params);
     const total = countResult[0].total;

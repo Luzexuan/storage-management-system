@@ -35,7 +35,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
       params.push(searchTerm, searchTerm, searchTerm);
     }
 
-    // 获取总数
+    // Get total count
     const countSql = sql.replace('SELECT i.*, c.category_name', 'SELECT COUNT(*) as total');
     const [countResult] = await db.execute(countSql, params);
     const total = countResult[0].total;
