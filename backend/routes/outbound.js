@@ -4,7 +4,7 @@ const db = require('../config/database');
 const { verifyToken, verifyActiveUser } = require('../middleware/auth');
 const { logOperation, getClientIP } = require('../utils/logger');
 
-// 获取所有出库记录
+// Get all outbound records
 router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
   const { itemId, isReturned, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -50,12 +50,12 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取出库记录失败:', error);
-    res.status(500).json({ error: '获取出库记录失败' });
+    console.error('Failed to get outbound records:', error);
+    res.status(500).json({ error: 'Failed to get outbound records' });
   }
 });
 
-// 获取未归还的借用记录（用于提醒）
+// Get unreturned borrowing records (for reminders)
 router.get('/unreturned/list', verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const [records] = await db.execute(`
@@ -70,12 +70,12 @@ router.get('/unreturned/list', verifyToken, verifyActiveUser, async (req, res) =
 
     res.json({ records });
   } catch (error) {
-    console.error('获取未归还记录失败:', error);
-    res.status(500).json({ error: '获取未归还记录失败' });
+    console.error('Failed to get unreturned records:', error);
+    res.status(500).json({ error: 'Failed to get unreturned records' });
   }
 });
 
-// 获取当前用户可归还的借用记录（用于快速归还）
+// Get current user's borrowing records (for quick return)
 router.get('/my-borrowings', verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const [records] = await db.execute(`
@@ -101,12 +101,12 @@ router.get('/my-borrowings', verifyToken, verifyActiveUser, async (req, res) => 
 
     res.json({ borrowings: records });
   } catch (error) {
-    console.error('获取我的借用记录失败:', error);
-    res.status(500).json({ error: '获取我的借用记录失败' });
+    console.error('Failed to get my borrowing records:', error);
+    res.status(500).json({ error: 'Failed to get my borrowing records' });
   }
 });
 
-// 创建出库记录（永久转移或暂时借用）
+// Create outbound record (permanent transfer or temporary borrow)
 router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   const {
     itemId,
@@ -120,18 +120,18 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   } = req.body;
 
   if (!itemId || !quantity || quantity <= 0) {
-    return res.status(400).json({ error: '物品ID和数量必须提供且数量大于0' });
+    return res.status(400).json({ error: 'Item ID and quantity are required and quantity must be greater than 0' });
   }
 
   if (!['transfer', 'borrow'].includes(outboundType)) {
-    return res.status(400).json({ error: '出库类型必须是transfer或borrow' });
+    return res.status(400).json({ error: 'Outbound type must be transfer or borrow' });
   }
 
-  // 借用时需要借用人信息和预计归还日期
+  // Borrowing requires borrower information and expected return date
   if (outboundType === 'borrow') {
     if (!borrowerName || !borrowerPhone || !borrowerEmail || !expectedReturnDate) {
       return res.status(400).json({
-        error: '借用时必须提供借用人姓名、电话、邮箱和预计归还日期'
+        error: 'Borrowing requires borrower name, phone, email and expected return date'
       });
     }
   }
@@ -141,7 +141,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // 获取物品信息
+    // Get item information
     const [items] = await connection.execute(
       'SELECT * FROM items WHERE item_id = ? FOR UPDATE',
       [itemId]
@@ -149,20 +149,20 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     if (items.length === 0) {
       await connection.rollback();
-      return res.status(404).json({ error: '物品不存在' });
+      return res.status(404).json({ error: 'Item not found' });
     }
 
     const item = items[0];
 
-    // 检查库存
+    // Check inventory
     if (item.current_quantity < quantity) {
       await connection.rollback();
       return res.status(400).json({
-        error: `库存不足，当前库存: ${item.current_quantity}，需要出库: ${quantity}`
+        error: `Insufficient inventory, current stock: ${item.current_quantity}, requested: ${quantity}`
       });
     }
 
-    // 插入出库记录
+    // Insert outbound record
     const [result] = await connection.execute(
       `INSERT INTO outbound_records
        (item_id, unique_code, quantity, outbound_type, borrower_name, borrower_phone,
@@ -182,7 +182,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       ]
     );
 
-    // 更新物品库存
+    // Update item inventory
     const newQuantity = item.current_quantity - quantity;
     let newStatus = 'in_stock';
     if (newQuantity === 0) {
@@ -200,7 +200,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       [newQuantity, quantity, newStatus, itemId]
     );
 
-    // 记录日志
+    // Log operation
     await logOperation({
       operationType: 'outbound',
       operatorId: req.user.userId,
@@ -220,20 +220,20 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
     await connection.commit();
 
     res.status(201).json({
-      message: '出库成功',
+      message: 'Outbound successful',
       outboundId: result.insertId,
       newQuantity
     });
   } catch (error) {
     await connection.rollback();
-    console.error('出库失败:', error);
-    res.status(500).json({ error: '出库失败' });
+    console.error('Outbound failed:', error);
+    res.status(500).json({ error: 'Outbound failed' });
   } finally {
     connection.release();
   }
 });
 
-// 获取单条出库记录详情
+// Get single outbound record details
 router.get('/:outboundId', verifyToken, verifyActiveUser, async (req, res) => {
   const { outboundId } = req.params;
 
@@ -249,13 +249,13 @@ router.get('/:outboundId', verifyToken, verifyActiveUser, async (req, res) => {
     );
 
     if (records.length === 0) {
-      return res.status(404).json({ error: '出库记录不存在' });
+      return res.status(404).json({ error: 'Outbound record not found' });
     }
 
     res.json({ record: records[0] });
   } catch (error) {
-    console.error('获取出库记录详情失败:', error);
-    res.status(500).json({ error: '获取出库记录详情失败' });
+    console.error('Failed to get outbound record details:', error);
+    res.status(500).json({ error: 'Failed to get outbound record details' });
   }
 });
 

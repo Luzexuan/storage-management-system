@@ -5,7 +5,7 @@ const { verifyToken, verifyAdmin, verifyActiveUser } = require('../middleware/au
 const { logOperation, getClientIP } = require('../utils/logger');
 const { generateUniqueCode, getCategoryPath } = require('../utils/codeGenerator');
 
-// 获取所有物品（支持分页和筛选）
+// Get all items (with pagination and filters)
 router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
   const { categoryId, status, search, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -56,12 +56,12 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取物品列表失败:', error);
-    res.status(500).json({ error: '获取物品列表失败' });
+    console.error('Failed to get items list:', error);
+    res.status(500).json({ error: 'Failed to get items list' });
   }
 });
 
-// 根据分类路径获取物品（按分类降序索引）
+// Get items by category path (descending by category level)
 router.get('/by-category-path', verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const [items] = await db.execute(`
@@ -71,19 +71,19 @@ router.get('/by-category-path', verifyToken, verifyActiveUser, async (req, res) 
       ORDER BY c.level DESC, i.category_id, i.unique_code
     `);
 
-    // 为每个物品添加完整分类路径
+    // Add full category path for each item
     for (let item of items) {
       item.categoryPath = await getCategoryPath(item.category_id);
     }
 
     res.json({ items });
   } catch (error) {
-    console.error('按分类获取物品失败:', error);
-    res.status(500).json({ error: '按分类获取物品失败' });
+    console.error('Failed to get items by category:', error);
+    res.status(500).json({ error: 'Failed to get items by category' });
   }
 });
 
-// 获取单个物品详情
+// Get single item details
 router.get('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
   const { itemId } = req.params;
 
@@ -97,7 +97,7 @@ router.get('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
     );
 
     if (items.length === 0) {
-      return res.status(404).json({ error: '物品不存在' });
+      return res.status(404).json({ error: 'Item not found' });
     }
 
     const item = items[0];
@@ -105,36 +105,36 @@ router.get('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
 
     res.json({ item });
   } catch (error) {
-    console.error('获取物品详情失败:', error);
-    res.status(500).json({ error: '获取物品详情失败' });
+    console.error('Failed to get item details:', error);
+    res.status(500).json({ error: 'Failed to get item details' });
   }
 });
 
-// 创建新物品
+// Create new item
 router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   const { categoryId, itemName, model, specification, isStackable, description, uniqueCode } = req.body;
 
   if (!categoryId || !itemName) {
-    return res.status(400).json({ error: '分类和物品名称不能为空' });
+    return res.status(400).json({ error: 'Category and item name are required' });
   }
 
-  // 如果不是可堆叠物品，必须提供唯一编号
+  // Non-stackable items must have unique code
   if (!isStackable && !uniqueCode) {
-    return res.status(400).json({ error: '非堆叠物品必须提供唯一编号' });
+    return res.status(400).json({ error: 'Non-stackable items must have unique code' });
   }
 
   try {
-    // 检查分类是否存在
+    // Check if category exists
     const [categories] = await db.execute(
       'SELECT category_id, category_name FROM categories WHERE category_id = ?',
       [categoryId]
     );
 
     if (categories.length === 0) {
-      return res.status(400).json({ error: '分类不存在' });
+      return res.status(400).json({ error: 'Category not found' });
     }
 
-    // 如果提供了唯一编号，检查是否已存在
+    // If unique code is provided, check if it already exists
     if (uniqueCode) {
       const [existing] = await db.execute(
         'SELECT item_id FROM items WHERE unique_code = ?',
@@ -142,7 +142,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       );
 
       if (existing.length > 0) {
-        return res.status(400).json({ error: '唯一编号已存在，请使用其他编号' });
+        return res.status(400).json({ error: 'Unique code already exists, please use a different one' });
       }
     }
 
@@ -153,7 +153,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
       [uniqueCode || null, categoryId, itemName, model || null, specification || null, isStackable || false, description || null]
     );
 
-    // 记录日志
+    // Log operation
     await logOperation({
       operationType: 'edit_item',
       operatorId: req.user.userId,
@@ -169,17 +169,17 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
     });
 
     res.status(201).json({
-      message: '物品创建成功',
+      message: 'Item created successfully',
       itemId: result.insertId,
       uniqueCode: uniqueCode || null
     });
   } catch (error) {
-    console.error('创建物品失败:', error);
-    res.status(500).json({ error: '创建物品失败' });
+    console.error('Failed to create item:', error);
+    res.status(500).json({ error: 'Failed to create item' });
   }
 });
 
-// 更新物品信息（管理员可修改所有字段，普通用户仅可修改部分字段）
+// Update item information (admins can modify all fields, regular users can only modify some)
 router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
   const { itemId } = req.params;
   const { itemName, model, specification, description } = req.body;
@@ -208,7 +208,7 @@ router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
     }
 
     if (updates.length === 0) {
-      return res.status(400).json({ error: '没有可更新的字段' });
+      return res.status(400).json({ error: 'No fields to update' });
     }
 
     sql += updates.join(',') + ' WHERE item_id = ?';
@@ -216,7 +216,7 @@ router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
 
     await db.execute(sql, params);
 
-    // 记录日志
+    // Log operation
     await logOperation({
       operationType: 'edit_item',
       operatorId: req.user.userId,
@@ -229,35 +229,35 @@ router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
       ipAddress: getClientIP(req)
     });
 
-    res.json({ message: '物品更新成功' });
+    res.json({ message: 'Item updated successfully' });
   } catch (error) {
-    console.error('更新物品失败:', error);
-    res.status(500).json({ error: '更新物品失败' });
+    console.error('Failed to update item:', error);
+    res.status(500).json({ error: 'Failed to update item' });
   }
 });
 
-// 删除物品（仅管理员）
+// Delete item (admin only)
 router.delete('/:itemId', verifyToken, verifyActiveUser, verifyAdmin, async (req, res) => {
   const { itemId } = req.params;
 
   try {
-    // 检查是否有库存
+    // Check if item has inventory
     const [items] = await db.execute(
       'SELECT current_quantity FROM items WHERE item_id = ?',
       [itemId]
     );
 
     if (items.length === 0) {
-      return res.status(404).json({ error: '物品不存在' });
+      return res.status(404).json({ error: 'Item not found' });
     }
 
     if (items[0].current_quantity > 0) {
-      return res.status(400).json({ error: '物品还有库存，无法删除' });
+      return res.status(400).json({ error: 'Item still has inventory, cannot delete' });
     }
 
     await db.execute('DELETE FROM items WHERE item_id = ?', [itemId]);
 
-    // 记录日志
+    // Log operation
     await logOperation({
       operationType: 'edit_item',
       operatorId: req.user.userId,
@@ -267,10 +267,10 @@ router.delete('/:itemId', verifyToken, verifyActiveUser, verifyAdmin, async (req
       ipAddress: getClientIP(req)
     });
 
-    res.json({ message: '物品删除成功' });
+    res.json({ message: 'Item deleted successfully' });
   } catch (error) {
-    console.error('删除物品失败:', error);
-    res.status(500).json({ error: '删除物品失败' });
+    console.error('Failed to delete item:', error);
+    res.status(500).json({ error: 'Failed to delete item' });
   }
 });
 

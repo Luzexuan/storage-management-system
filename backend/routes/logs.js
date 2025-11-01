@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../config/database');
 const { verifyToken, verifyActiveUser } = require('../middleware/auth');
 
-// 获取操作日志（支持筛选）
+// Get operation logs (with filters)
 router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
   const {
     operationType,
@@ -62,7 +62,7 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     const [logs] = await db.execute(sql, params);
 
-    // 解析JSON字段
+    // Parse JSON fields
     const parsedLogs = logs.map(log => ({
       ...log,
       operation_detail: JSON.parse(log.operation_detail || '{}')
@@ -78,12 +78,12 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取操作日志失败:', error);
-    res.status(500).json({ error: '获取操作日志失败' });
+    console.error('Failed to get operation logs:', error);
+    res.status(500).json({ error: 'Failed to get operation logs' });
   }
 });
 
-// 获取单个目标的操作历史
+// Get operation history for a specific target
 router.get('/target/:targetType/:targetId', verifyToken, verifyActiveUser, async (req, res) => {
   const { targetType, targetId } = req.params;
 
@@ -104,12 +104,12 @@ router.get('/target/:targetType/:targetId', verifyToken, verifyActiveUser, async
 
     res.json({ logs: parsedLogs });
   } catch (error) {
-    console.error('获取目标操作历史失败:', error);
-    res.status(500).json({ error: '获取目标操作历史失败' });
+    console.error('Failed to get target operation history:', error);
+    res.status(500).json({ error: 'Failed to get target operation history' });
   }
 });
 
-// 获取操作统计
+// Get operation statistics
 router.get('/statistics', verifyToken, verifyActiveUser, async (req, res) => {
   const { startDate, endDate } = req.query;
 
@@ -140,8 +140,8 @@ router.get('/statistics', verifyToken, verifyActiveUser, async (req, res) => {
 
     res.json({ statistics: stats });
   } catch (error) {
-    console.error('获取操作统计失败:', error);
-    res.status(500).json({ error: '获取操作统计失败' });
+    console.error('Failed to get operation statistics:', error);
+    res.status(500).json({ error: 'Failed to get operation statistics' });
   }
 });
 
