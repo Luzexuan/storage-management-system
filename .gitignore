@@ -1,0 +1,54 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# 环境变量
+.env
+.env.local
+.env.production
+
+# 日志
+logs/
+*.log
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 备份文件
+*.bak
+*.backup
+backup/
+
+# 数据库备份
+*.sql.gz
+*.sql.zip
+database/backup/
+
+# 上传文件
+uploads/
+public/uploads/
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# 构建产物
+dist/
+build/

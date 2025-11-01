@@ -1,0 +1,94 @@
+# MySQL 优化配置 - 针对小规模应用（20人使用）
+# 适用于 8GB 内存服务器
+#
+# 部署方法：
+# sudo cp mysql-optimization.cnf /etc/mysql/mysql.conf.d/storage-optimization.cnf
+# sudo systemctl restart mysql
+
+[mysqld]
+# ========== 性能优化 ==========
+
+# InnoDB 缓冲池大小 - 设置为物理内存的 6-8%（8GB * 6% = 512MB）
+# 这是最重要的性能参数，缓存表和索引数据
+innodb_buffer_pool_size = 512M
+
+# 最大连接数 - 20人使用，50个连接足够（包含后台任务）
+max_connections = 50
+
+# 查询缓存 - 缓存常用查询结果
+query_cache_type = 1
+query_cache_size = 64M
+query_cache_limit = 2M
+
+# InnoDB 日志文件大小
+innodb_log_file_size = 64M
+innodb_log_buffer_size = 16M
+
+# 表打开缓存 - 减少文件打开次数
+table_open_cache = 400
+table_definition_cache = 400
+
+# 排序和连接缓冲区
+sort_buffer_size = 2M
+read_buffer_size = 2M
+read_rnd_buffer_size = 4M
+join_buffer_size = 2M
+
+# 临时表大小
+tmp_table_size = 32M
+max_heap_table_size = 32M
+
+# ========== 连接优化 ==========
+
+# 连接超时设置
+wait_timeout = 600
+interactive_timeout = 600
+connect_timeout = 10
+
+# 每个连接的内存使用
+thread_cache_size = 16
+thread_stack = 256K
+
+# ========== InnoDB 优化 ==========
+
+# 每个表使用独立表空间
+innodb_file_per_table = 1
+
+# 刷新日志策略（1 = 最安全但稍慢，2 = 平衡性能和安全）
+innodb_flush_log_at_trx_commit = 2
+
+# 刷新方法
+innodb_flush_method = O_DIRECT
+
+# IO 容量（SSD 可以设置更高）
+innodb_io_capacity = 200
+innodb_io_capacity_max = 400
+
+# ========== 日志优化 ==========
+
+# 慢查询日志 - 用于性能监控
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow-query.log
+long_query_time = 2
+
+# 记录没有使用索引的查询
+log_queries_not_using_indexes = 0
+
+# ========== 字符集 ==========
+
+character_set_server = utf8mb4
+collation_server = utf8mb4_unicode_ci
+
+# ========== 安全设置 ==========
+
+# 禁用本地文件加载
+local_infile = 0
+
+# SQL 模式
+sql_mode = STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+[mysql]
+default_character_set = utf8mb4
+
+[client]
+default_character_set = utf8mb4
