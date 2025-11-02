@@ -41,8 +41,9 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
     const total = countResult[0].total;
 
     // Get paginated data
-    sql += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
-    params.push(Number(limit) || 20, Number(offset) || 0);
+    const finalLimit = Number(limit) || 20;
+    const finalOffset = Number(offset) || 0;
+    sql += ` ORDER BY i.created_at DESC LIMIT ${finalLimit} OFFSET ${finalOffset}`;
 
     const [items] = await db.execute(sql, params);
 

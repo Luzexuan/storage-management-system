@@ -57,8 +57,9 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
     const total = countResult[0].total;
 
     // Get paginated data
-    sql += ' ORDER BY ol.operation_time DESC LIMIT ? OFFSET ?';
-    params.push(Number(limit) || 50, Number(offset) || 0);
+    const finalLimit = Number(limit) || 50;
+    const finalOffset = Number(offset) || 0;
+    sql += ` ORDER BY ol.operation_time DESC LIMIT ${finalLimit} OFFSET ${finalOffset}`;
 
     const [logs] = await db.execute(sql, params);
 
