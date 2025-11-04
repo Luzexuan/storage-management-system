@@ -2,6 +2,7 @@
 
 # Full restart script for storage management system
 # This script performs a complete cleanup and restart
+# Usage: bash deployment/full-restart.sh (no chmod needed!)
 
 set -e
 
@@ -11,6 +12,9 @@ echo "=========================================="
 
 # Change to project directory
 cd /var/www/storage-management
+
+# Ensure all deployment scripts have execute permissions
+chmod +x deployment/*.sh 2>/dev/null || true
 
 echo ""
 echo "Step 1: Stopping all PM2 processes..."

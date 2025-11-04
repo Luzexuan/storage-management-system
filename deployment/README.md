@@ -2,12 +2,46 @@
 
 This directory contains scripts for deploying and managing the storage management system.
 
+## Quick Start (Recommended)
+
+**No need to manually set permissions!** Just use `bash` to run scripts:
+
+```bash
+cd /var/www/storage-management
+git pull origin main
+bash deployment/full-restart.sh
+```
+
+Or use the deploy shortcut:
+
+```bash
+cd /var/www/storage-management
+bash deployment/deploy.sh
+```
+
 ## Scripts Overview
+
+### 0. `deploy.sh` (Quick Deploy - RECOMMENDED)
+One-command deployment that handles everything automatically.
+
+**What it does:**
+- Pulls latest code from Git
+- Automatically sets script permissions
+- Runs full restart
+
+**Usage:**
+```bash
+cd /var/www/storage-management
+bash deployment/deploy.sh
+```
+
+**No chmod needed!** The script handles permissions automatically.
 
 ### 1. `full-restart.sh` (Linux/Ubuntu Server)
 Complete system restart script that ensures all caches are cleared and code is updated.
 
 **What it does:**
+- Auto-sets permissions for all deployment scripts
 - Stops all PM2 processes
 - Kills all Node.js processes
 - Clears PM2 cache and logs
@@ -17,7 +51,13 @@ Complete system restart script that ensures all caches are cleared and code is u
 - Restarts PM2 with fresh processes
 - Displays diagnostic information
 
-**Usage:**
+**Usage (Method 1 - No chmod needed):**
+```bash
+cd /var/www/storage-management
+bash deployment/full-restart.sh
+```
+
+**Usage (Method 2 - Traditional):**
 ```bash
 cd /var/www/storage-management
 chmod +x deployment/full-restart.sh
@@ -35,11 +75,10 @@ Diagnostic script to verify if code updates are properly deployed.
 - File checksums (MD5)
 - UTF-8 encoding issues
 
-**Usage:**
+**Usage (No chmod needed):**
 ```bash
 cd /var/www/storage-management
-chmod +x deployment/check-updates.sh
-./deployment/check-updates.sh
+bash deployment/check-updates.sh
 ```
 
 ### 3. `full-restart.bat` (Windows, for local testing)
