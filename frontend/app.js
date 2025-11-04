@@ -517,7 +517,7 @@ async function showAddItemModal() {
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group">
+              <div class="form-group" id="stackable-checkbox-group">
                 <label>
                   <input type="checkbox" id="item-stackable"> 可堆叠物品（通用配件）
                 </label>
@@ -573,19 +573,26 @@ async function showAddItemModal() {
   document.getElementById('item-category-level1').addEventListener('change', async (e) => {
     const categoryName = e.target.options[e.target.selectedIndex]?.dataset.name || '';
     const stackableCheckbox = document.getElementById('item-stackable');
+    const stackableGroup = document.getElementById('stackable-checkbox-group');
 
     // Auto-set stackable based on category
     if (categoryName === '通用配件与工具') {
+      // General parts: auto-check and show checkbox
       stackableCheckbox.checked = true;
       stackableCheckbox.disabled = false;
+      stackableGroup.style.display = 'block';
     } else if (categoryName === '机器人与办公用电子产品') {
+      // Robots/Electronics: force non-stackable and hide checkbox
       stackableCheckbox.checked = false;
       stackableCheckbox.disabled = true;
+      stackableGroup.style.display = 'none'; // Hide the checkbox completely
     } else {
+      // Other categories: show checkbox and let user choose
       stackableCheckbox.disabled = false;
+      stackableGroup.style.display = 'block';
     }
 
-    // Trigger stackable change handler
+    // Trigger stackable change handler to update UI
     stackableCheckbox.dispatchEvent(new Event('change'));
   });
 
