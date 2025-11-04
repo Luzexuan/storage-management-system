@@ -442,7 +442,7 @@ function getOperationTypeName(type) {
 function getStatusName(status) {
   const names = {
     'in_stock': '在库',
-    'out_of_stock': '缺货',
+    'out_of_stock': '不在库',
     'partially_out': '部分出库',
     'active': '激活',
     'pending': '待审核',
@@ -471,7 +471,8 @@ function closeModal(modalId) {
 
 // 新建物品模态框
 async function showAddItemModal() {
-  const categories = await loadCategoriesForSelect();
+  // Load top-level categories for cascading selection
+  const topCategories = await loadTopLevelCategories();
 
   const modalHTML = `
     <div id="add-item-modal" class="modal active">
@@ -484,22 +485,38 @@ async function showAddItemModal() {
           <form id="add-item-form">
             <div class="form-row">
               <div class="form-group">
-                <label>分类 *</label>
-                <select id="item-category" required>
-                  <option value="">请选择分类</option>
-                  ${categories.map(cat => `<option value="${cat.category_id}">${cat.displayName}</option>`).join('')}
+                <label>一级分类 *</label>
+                <select id="item-category-level1" required>
+                  <option value="">请选择一级分类</option>
+                  ${topCategories.map(cat => `<option value="${cat.category_id}" data-name="${cat.category_name}">${cat.category_name}</option>`).join('')}
                 </select>
               </div>
-              <div class="form-group">
-                <label>物品名称 *</label>
-                <input type="text" id="item-name" required>
+              <div class="form-group" id="category-level2-group" style="display: none;">
+                <label>次级分类</label>
+                <select id="item-category-level2">
+                  <option value="">请选择次级分类</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="category-level3-row" style="display: none;">
+              <div class="form-group" id="category-level3-group">
+                <label>三级分类</label>
+                <select id="item-category-level3">
+                  <option value="">请选择三级分类</option>
+                </select>
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
+                <label>物品名称 *</label>
+                <input type="text" id="item-name" required>
+              </div>
+              <div class="form-group">
                 <label>型号</label>
                 <input type="text" id="item-model">
               </div>
+            </div>
+            <div class="form-row">
               <div class="form-group">
                 <label>
                   <input type="checkbox" id="item-stackable"> 可堆叠物品（通用配件）
@@ -510,6 +527,19 @@ async function showAddItemModal() {
               <div class="form-group">
                 <label>唯一编号 * <small>（格式：一级分类-次级分类-型号-唯一编号，如：机器人-灵巧手-L30-LHT10，最后的唯一编号是物品在物理世界中自带的编号）</small></label>
                 <input type="text" id="item-unique-code" required placeholder="例如：机器人-灵巧手-L30-LHT10">
+              </div>
+            </div>
+            <div class="form-row full" id="stock-input-row" style="display: none;">
+              <div class="form-group">
+                <label id="stock-input-label">初始库存数量 *</label>
+                <input type="number" id="item-initial-stock" min="0" value="0">
+              </div>
+            </div>
+            <div class="form-row full" id="in-stock-row">
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="item-in-stock" checked> 物品在库
+                </label>
               </div>
             </div>
             <div class="form-row full">
@@ -536,16 +566,56 @@ async function showAddItemModal() {
 
   document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-  // 监听可堆叠复选框变化
+  // Setup cascading category selection
+  setupCascadingCategories();
+
+  // Monitor level 1 category changes - auto set stackable based on category
+  document.getElementById('item-category-level1').addEventListener('change', async (e) => {
+    const categoryName = e.target.options[e.target.selectedIndex]?.dataset.name || '';
+    const stackableCheckbox = document.getElementById('item-stackable');
+
+    // Auto-set stackable based on category
+    if (categoryName === '通用配件与工具') {
+      stackableCheckbox.checked = true;
+      stackableCheckbox.disabled = false;
+    } else if (categoryName === '机器人与办公用电子产品') {
+      stackableCheckbox.checked = false;
+      stackableCheckbox.disabled = true;
+    } else {
+      stackableCheckbox.disabled = false;
+    }
+
+    // Trigger stackable change handler
+    stackableCheckbox.dispatchEvent(new Event('change'));
+  });
+
+  // Monitor stackable checkbox changes
   document.getElementById('item-stackable').addEventListener('change', (e) => {
     const uniqueCodeRow = document.getElementById('unique-code-row');
     const uniqueCodeInput = document.getElementById('item-unique-code');
+    const stockInputRow = document.getElementById('stock-input-row');
+    const stockInput = document.getElementById('item-initial-stock');
+    const inStockRow = document.getElementById('in-stock-row');
+    const inStockCheckbox = document.getElementById('item-in-stock');
+    const stockLabel = document.getElementById('stock-input-label');
+
     if (e.target.checked) {
+      // Stackable items: show quantity input, hide unique code and in-stock checkbox
       uniqueCodeRow.style.display = 'none';
       uniqueCodeInput.required = false;
+      stockInputRow.style.display = 'block';
+      stockInput.required = true;
+      inStockRow.style.display = 'none';
+      inStockCheckbox.checked = true; // Auto check
+      stockLabel.textContent = '初始库存数量 *';
     } else {
+      // Non-stackable items: show unique code and in-stock checkbox, hide quantity
       uniqueCodeRow.style.display = 'block';
       uniqueCodeInput.required = true;
+      stockInputRow.style.display = 'none';
+      stockInput.required = false;
+      inStockRow.style.display = 'block';
+      stockLabel.textContent = '初始库存数量';
     }
   });
 }
@@ -560,12 +630,98 @@ async function loadCategoriesForSelect() {
   }
 }
 
+// Load top-level categories
+async function loadTopLevelCategories() {
+  try {
+    const data = await apiRequest('/categories/top-level');
+    return data.categories;
+  } catch (error) {
+    showMessage('加载一级分类失败: ' + error.message, 'error');
+    return [];
+  }
+}
+
+// Load child categories
+async function loadChildCategories(parentId) {
+  try {
+    const data = await apiRequest(`/categories/${parentId}/children`);
+    return data.categories;
+  } catch (error) {
+    showMessage('加载子分类失败: ' + error.message, 'error');
+    return [];
+  }
+}
+
+// Setup cascading category selection
+function setupCascadingCategories() {
+  const level1Select = document.getElementById('item-category-level1');
+  const level2Select = document.getElementById('item-category-level2');
+  const level3Select = document.getElementById('item-category-level3');
+  const level2Group = document.getElementById('category-level2-group');
+  const level3Row = document.getElementById('category-level3-row');
+
+  // Level 1 change - load level 2
+  level1Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    // Reset level 2 and 3
+    level2Select.innerHTML = '<option value="">请选择次级分类</option>';
+    level3Select.innerHTML = '<option value="">请选择三级分类</option>';
+    level2Group.style.display = 'none';
+    level3Row.style.display = 'none';
+
+    if (categoryId) {
+      // Load children
+      const children = await loadChildCategories(categoryId);
+      if (children.length > 0) {
+        children.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.category_id;
+          option.textContent = cat.category_name;
+          level2Select.appendChild(option);
+        });
+        level2Group.style.display = 'block';
+      }
+    }
+  });
+
+  // Level 2 change - load level 3
+  level2Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    // Reset level 3
+    level3Select.innerHTML = '<option value="">请选择三级分类</option>';
+    level3Row.style.display = 'none';
+
+    if (categoryId) {
+      // Load children
+      const children = await loadChildCategories(categoryId);
+      if (children.length > 0) {
+        children.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.category_id;
+          option.textContent = cat.category_name;
+          level3Select.appendChild(option);
+        });
+        level3Row.style.display = 'block';
+      }
+    }
+  });
+}
+
 async function submitAddItem() {
-  const categoryId = document.getElementById('item-category').value;
+  // Get the deepest selected category
+  const level3 = document.getElementById('item-category-level3').value;
+  const level2 = document.getElementById('item-category-level2').value;
+  const level1 = document.getElementById('item-category-level1').value;
+  const categoryId = level3 || level2 || level1;
+
   const itemName = document.getElementById('item-name').value;
   const model = document.getElementById('item-model').value;
   const isStackable = document.getElementById('item-stackable').checked;
   const uniqueCode = document.getElementById('item-unique-code').value;
+  const initialStock = document.getElementById('item-initial-stock').value;
+  const inStock = document.getElementById('item-in-stock').checked;
   const specification = document.getElementById('item-specification').value;
   const description = document.getElementById('item-description').value;
 
@@ -579,6 +735,11 @@ async function submitAddItem() {
     return;
   }
 
+  if (isStackable && (!initialStock || parseInt(initialStock) < 0)) {
+    showMessage('可堆叠物品必须提供初始库存数量', 'error');
+    return;
+  }
+
   try {
     await apiRequest('/items', {
       method: 'POST',
@@ -588,6 +749,7 @@ async function submitAddItem() {
         model: model || null,
         isStackable,
         uniqueCode: isStackable ? null : uniqueCode,
+        initialStock: isStackable ? parseInt(initialStock) : (inStock ? 1 : 0),
         specification: specification || null,
         description: description || null
       })
@@ -595,7 +757,15 @@ async function submitAddItem() {
 
     showMessage('物品创建成功！', 'success');
     closeModal('add-item-modal');
-    document.getElementById('add-item-modal').remove();
+
+    // Fix: Wait a bit before removing to ensure modal is closed
+    setTimeout(() => {
+      const modal = document.getElementById('add-item-modal');
+      if (modal) {
+        modal.remove();
+      }
+    }, 300);
+
     loadItems();
   } catch (error) {
     showMessage('创建失败: ' + error.message, 'error');
@@ -704,8 +874,141 @@ function showAddCategoryModal() {
   showMessage('仅管理员可通过API创建分类', 'info');
 }
 
-function viewItem(itemId) {
-  showMessage(`查看物品 ID: ${itemId}`, 'info');
+async function viewItem(itemId) {
+  try {
+    // Fetch item details
+    const itemData = await apiRequest(`/items/${itemId}`);
+    const item = itemData.item;
+
+    // Fetch item history (inbound and outbound records)
+    const inboundData = await apiRequest(`/inbound?itemId=${itemId}`);
+    const outboundData = await apiRequest(`/outbound?itemId=${itemId}`);
+    const logsData = await apiRequest(`/logs/target/item/${itemId}`);
+
+    const inboundRecords = inboundData.records || [];
+    const outboundRecords = outboundData.records || [];
+    const operationLogs = logsData.logs || [];
+
+    // Combine and sort all events by time
+    const allEvents = [
+      ...inboundRecords.map(r => ({
+        type: 'inbound',
+        time: r.inbound_time,
+        quantity: r.quantity,
+        operator: r.operator_name,
+        remarks: r.remarks
+      })),
+      ...outboundRecords.map(r => ({
+        type: r.outbound_type === 'borrow' ? 'borrow' : 'outbound',
+        time: r.outbound_time,
+        quantity: r.quantity,
+        operator: r.operator_name,
+        borrower: r.borrower_name,
+        expectedReturn: r.expected_return_date,
+        returned: r.is_returned,
+        remarks: r.remarks
+      })),
+      ...operationLogs.map(r => ({
+        type: 'operation',
+        time: r.operation_time,
+        operationType: r.operation_type,
+        operator: r.operator_name,
+        detail: r.operation_detail
+      }))
+    ];
+
+    allEvents.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    // Generate events HTML
+    let eventsHTML = '';
+    if (allEvents.length === 0) {
+      eventsHTML = '<tr><td colspan="5">暂无历史记录</td></tr>';
+    } else {
+      eventsHTML = allEvents.map(event => {
+        let eventDesc = '';
+        let eventDetails = '';
+
+        if (event.type === 'inbound') {
+          eventDesc = `<span class="badge badge-success">入库</span>`;
+          eventDetails = `数量: ${event.quantity}`;
+        } else if (event.type === 'borrow') {
+          eventDesc = `<span class="badge badge-warning">借用</span>`;
+          eventDetails = `数量: ${event.quantity}<br>借用人: ${event.borrower || 'N/A'}<br>预计归还: ${event.expectedReturn ? new Date(event.expectedReturn).toLocaleDateString() : 'N/A'}<br>状态: ${event.returned ? '已归还' : '未归还'}`;
+        } else if (event.type === 'outbound') {
+          eventDesc = `<span class="badge badge-danger">出库</span>`;
+          eventDetails = `数量: ${event.quantity}`;
+        } else if (event.type === 'operation') {
+          eventDesc = `<span class="badge badge-secondary">操作</span>`;
+          eventDetails = getOperationTypeName(event.operationType);
+        }
+
+        return `
+          <tr>
+            <td>${new Date(event.time).toLocaleString()}</td>
+            <td>${eventDesc}</td>
+            <td>${eventDetails}</td>
+            <td>${event.operator || 'N/A'}</td>
+            <td>${event.remarks || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    const modalHTML = `
+      <div id="view-item-modal" class="modal active">
+        <div class="modal-content" style="max-width: 1000px;">
+          <div class="modal-header">
+            <h2>物品详情</h2>
+            <button class="modal-close" onclick="closeModal('view-item-modal')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="item-detail-section">
+              <h3>基本信息</h3>
+              <table class="detail-table">
+                <tr><td><strong>物品名称:</strong></td><td>${item.item_name}</td></tr>
+                <tr><td><strong>唯一编号:</strong></td><td>${item.unique_code || 'N/A'}</td></tr>
+                <tr><td><strong>分类:</strong></td><td>${item.categoryPath || item.category_name}</td></tr>
+                <tr><td><strong>型号:</strong></td><td>${item.model || '-'}</td></tr>
+                <tr><td><strong>规格:</strong></td><td>${item.specification || '-'}</td></tr>
+                <tr><td><strong>描述:</strong></td><td>${item.description || '-'}</td></tr>
+                <tr><td><strong>可堆叠:</strong></td><td>${item.is_stackable ? '是' : '否'}</td></tr>
+                <tr><td><strong>当前库存:</strong></td><td>${item.current_quantity}</td></tr>
+                <tr><td><strong>总入库:</strong></td><td>${item.total_in || 0}</td></tr>
+                <tr><td><strong>总出库:</strong></td><td>${item.total_out || 0}</td></tr>
+                <tr><td><strong>状态:</strong></td><td><span class="badge ${getStatusBadgeClass(item.status)}">${getStatusName(item.status)}</span></td></tr>
+                <tr><td><strong>创建时间:</strong></td><td>${new Date(item.created_at).toLocaleString()}</td></tr>
+              </table>
+            </div>
+
+            <div class="item-detail-section">
+              <h3>历史记录</h3>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>事件类型</th>
+                    <th>详情</th>
+                    <th>操作员</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${eventsHTML}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('view-item-modal'); document.getElementById('view-item-modal').remove();">关闭</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+  } catch (error) {
+    showMessage('Failed to load item details: ' + error.message, 'error');
+  }
 }
 
 function deleteItem(itemId) {

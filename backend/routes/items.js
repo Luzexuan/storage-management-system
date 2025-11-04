@@ -113,7 +113,7 @@ router.get('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
 
 // Create new item
 router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
-  const { categoryId, itemName, model, specification, isStackable, description, uniqueCode } = req.body;
+  const { categoryId, itemName, model, specification, isStackable, description, uniqueCode, initialStock } = req.body;
 
   if (!categoryId || !itemName) {
     return res.status(400).json({ error: 'Category and item name are required' });
@@ -122,6 +122,15 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
   // Non-stackable items must have unique code
   if (!isStackable && !uniqueCode) {
     return res.status(400).json({ error: 'Non-stackable items must have unique code' });
+  }
+
+  // Parse initial stock
+  const stock = parseInt(initialStock) || 0;
+
+  // Determine initial status based on stock
+  let initialStatus = 'out_of_stock';
+  if (stock > 0) {
+    initialStatus = 'in_stock';
   }
 
   try {
@@ -149,9 +158,9 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     const [result] = await db.execute(
       `INSERT INTO items
-       (unique_code, category_id, item_name, model, specification, is_stackable, description, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'out_of_stock')`,
-      [uniqueCode || null, categoryId, itemName, model || null, specification || null, isStackable || false, description || null]
+       (unique_code, category_id, item_name, model, specification, is_stackable, description, status, current_quantity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uniqueCode || null, categoryId, itemName, model || null, specification || null, isStackable || false, description || null, initialStatus, stock]
     );
 
     // Log operation
@@ -164,7 +173,8 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
         action: 'create',
         itemName,
         uniqueCode: uniqueCode || null,
-        categoryId
+        categoryId,
+        initialStock: stock
       },
       ipAddress: getClientIP(req)
     });
