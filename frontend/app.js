@@ -884,9 +884,8 @@ function setupCascadingCategoriesAndStackable() {
   const level2Group = document.getElementById('category-level2-group');
   const level3Row = document.getElementById('category-level3-row');
 
-  // First, setup stackable checkbox change handler
-  const stackableCheckbox = document.getElementById('item-stackable');
-  stackableCheckbox.addEventListener('change', (e) => {
+  // Helper function to update form fields based on stackable state
+  function updateFormFieldsForStackable(isStackable) {
     const uniqueCodeRow = document.getElementById('unique-code-row');
     const uniqueCodeInput = document.getElementById('item-unique-code');
     const stockInputRow = document.getElementById('stock-input-row');
@@ -895,7 +894,7 @@ function setupCascadingCategoriesAndStackable() {
     const inStockCheckbox = document.getElementById('item-in-stock');
     const stockLabel = document.getElementById('stock-input-label');
 
-    if (e.target.checked) {
+    if (isStackable) {
       // Stackable items: show quantity input, hide unique code and in-stock checkbox
       uniqueCodeRow.style.display = 'none';
       uniqueCodeInput.required = false;
@@ -913,6 +912,12 @@ function setupCascadingCategoriesAndStackable() {
       inStockRow.style.display = 'block';
       stockLabel.textContent = '初始库存数量';
     }
+  }
+
+  // Setup stackable checkbox change handler
+  const stackableCheckbox = document.getElementById('item-stackable');
+  stackableCheckbox.addEventListener('change', (e) => {
+    updateFormFieldsForStackable(e.target.checked);
   });
 
   // Level 1 change - load level 2 AND auto-set stackable
@@ -948,19 +953,22 @@ function setupCascadingCategoriesAndStackable() {
       stackableCheckbox.checked = true;
       stackableCheckbox.disabled = false;
       stackableGroup.style.display = 'block';
+      // Directly update form fields
+      updateFormFieldsForStackable(true);
     } else if (categoryName === '机器人与办公用电子产品') {
       // Robots/Electronics: force non-stackable and hide checkbox
       stackableCheckbox.checked = false;
       stackableCheckbox.disabled = true;
       stackableGroup.style.display = 'none';
+      // Directly update form fields
+      updateFormFieldsForStackable(false);
     } else {
       // Other categories: show checkbox and let user choose
       stackableCheckbox.disabled = false;
       stackableGroup.style.display = 'block';
+      // Update form fields based on current checkbox state
+      updateFormFieldsForStackable(stackableCheckbox.checked);
     }
-
-    // Trigger stackable change handler to update UI
-    stackableCheckbox.dispatchEvent(new Event('change'));
   });
 
   // Level 2 change - load level 3
