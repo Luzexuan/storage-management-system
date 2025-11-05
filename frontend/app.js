@@ -840,65 +840,8 @@ async function showAddItemModal() {
 
   document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-  // Setup cascading category selection
-  setupCascadingCategories();
-
-  // Monitor level 1 category changes - auto set stackable based on category
-  document.getElementById('item-category-level1').addEventListener('change', async (e) => {
-    const categoryName = e.target.options[e.target.selectedIndex]?.dataset.name || '';
-    const stackableCheckbox = document.getElementById('item-stackable');
-    const stackableGroup = document.getElementById('stackable-checkbox-group');
-
-    // Auto-set stackable based on category
-    if (categoryName === '通用配件与工具') {
-      // General parts: auto-check and show checkbox
-      stackableCheckbox.checked = true;
-      stackableCheckbox.disabled = false;
-      stackableGroup.style.display = 'block';
-    } else if (categoryName === '机器人与办公用电子产品') {
-      // Robots/Electronics: force non-stackable and hide checkbox
-      stackableCheckbox.checked = false;
-      stackableCheckbox.disabled = true;
-      stackableGroup.style.display = 'none'; // Hide the checkbox completely
-    } else {
-      // Other categories: show checkbox and let user choose
-      stackableCheckbox.disabled = false;
-      stackableGroup.style.display = 'block';
-    }
-
-    // Trigger stackable change handler to update UI
-    stackableCheckbox.dispatchEvent(new Event('change'));
-  });
-
-  // Monitor stackable checkbox changes
-  document.getElementById('item-stackable').addEventListener('change', (e) => {
-    const uniqueCodeRow = document.getElementById('unique-code-row');
-    const uniqueCodeInput = document.getElementById('item-unique-code');
-    const stockInputRow = document.getElementById('stock-input-row');
-    const stockInput = document.getElementById('item-initial-stock');
-    const inStockRow = document.getElementById('in-stock-row');
-    const inStockCheckbox = document.getElementById('item-in-stock');
-    const stockLabel = document.getElementById('stock-input-label');
-
-    if (e.target.checked) {
-      // Stackable items: show quantity input, hide unique code and in-stock checkbox
-      uniqueCodeRow.style.display = 'none';
-      uniqueCodeInput.required = false;
-      stockInputRow.style.display = 'block';
-      stockInput.required = true;
-      inStockRow.style.display = 'none';
-      inStockCheckbox.checked = true; // Auto check
-      stockLabel.textContent = '初始库存数量 *';
-    } else {
-      // Non-stackable items: show unique code and in-stock checkbox, hide quantity
-      uniqueCodeRow.style.display = 'block';
-      uniqueCodeInput.required = true;
-      stockInputRow.style.display = 'none';
-      stockInput.required = false;
-      inStockRow.style.display = 'block';
-      stockLabel.textContent = '初始库存数量';
-    }
-  });
+  // Setup cascading category selection and stackable logic together
+  setupCascadingCategoriesAndStackable();
 }
 
 async function loadCategoriesForSelect() {
@@ -933,17 +876,49 @@ async function loadChildCategories(parentId) {
   }
 }
 
-// Setup cascading category selection
-function setupCascadingCategories() {
+// Setup cascading category selection and stackable checkbox logic
+function setupCascadingCategoriesAndStackable() {
   const level1Select = document.getElementById('item-category-level1');
   const level2Select = document.getElementById('item-category-level2');
   const level3Select = document.getElementById('item-category-level3');
   const level2Group = document.getElementById('category-level2-group');
   const level3Row = document.getElementById('category-level3-row');
 
-  // Level 1 change - load level 2
+  // First, setup stackable checkbox change handler
+  const stackableCheckbox = document.getElementById('item-stackable');
+  stackableCheckbox.addEventListener('change', (e) => {
+    const uniqueCodeRow = document.getElementById('unique-code-row');
+    const uniqueCodeInput = document.getElementById('item-unique-code');
+    const stockInputRow = document.getElementById('stock-input-row');
+    const stockInput = document.getElementById('item-initial-stock');
+    const inStockRow = document.getElementById('in-stock-row');
+    const inStockCheckbox = document.getElementById('item-in-stock');
+    const stockLabel = document.getElementById('stock-input-label');
+
+    if (e.target.checked) {
+      // Stackable items: show quantity input, hide unique code and in-stock checkbox
+      uniqueCodeRow.style.display = 'none';
+      uniqueCodeInput.required = false;
+      stockInputRow.style.display = 'block';
+      stockInput.required = true;
+      inStockRow.style.display = 'none';
+      inStockCheckbox.checked = true; // Auto check
+      stockLabel.textContent = '初始库存数量 *';
+    } else {
+      // Non-stackable items: show unique code and in-stock checkbox, hide quantity
+      uniqueCodeRow.style.display = 'block';
+      uniqueCodeInput.required = true;
+      stockInputRow.style.display = 'none';
+      stockInput.required = false;
+      inStockRow.style.display = 'block';
+      stockLabel.textContent = '初始库存数量';
+    }
+  });
+
+  // Level 1 change - load level 2 AND auto-set stackable
   level1Select.addEventListener('change', async (e) => {
     const categoryId = e.target.value;
+    const categoryName = e.target.options[e.target.selectedIndex]?.dataset.name || '';
 
     // Reset level 2 and 3
     level2Select.innerHTML = '<option value="">请选择次级分类</option>';
@@ -964,6 +939,28 @@ function setupCascadingCategories() {
         level2Group.style.display = 'block';
       }
     }
+
+    // Auto-set stackable based on category
+    const stackableGroup = document.getElementById('stackable-checkbox-group');
+
+    if (categoryName === '通用配件与工具') {
+      // General parts: auto-check and show checkbox
+      stackableCheckbox.checked = true;
+      stackableCheckbox.disabled = false;
+      stackableGroup.style.display = 'block';
+    } else if (categoryName === '机器人与办公用电子产品') {
+      // Robots/Electronics: force non-stackable and hide checkbox
+      stackableCheckbox.checked = false;
+      stackableCheckbox.disabled = true;
+      stackableGroup.style.display = 'none';
+    } else {
+      // Other categories: show checkbox and let user choose
+      stackableCheckbox.disabled = false;
+      stackableGroup.style.display = 'block';
+    }
+
+    // Trigger stackable change handler to update UI
+    stackableCheckbox.dispatchEvent(new Event('change'));
   });
 
   // Level 2 change - load level 3
