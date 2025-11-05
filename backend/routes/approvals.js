@@ -149,58 +149,161 @@ router.put('/:requestId/review', verifyToken, verifyActiveUser, verifyAdmin, asy
     // If approved, create the actual inbound/outbound record
     if (approved) {
       if (request.request_type === 'inbound') {
-        // Create inbound record
-        const [inboundResult] = await connection.execute(
-          `INSERT INTO inbound_records (item_id, quantity, inbound_type, related_outbound_id, operator_id, remarks)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            requestData.itemId,
-            requestData.quantity,
-            requestData.inboundType,
-            requestData.relatedOutboundId || null,
-            request.requester_id,  // Original requester as operator
-            requestData.remarks || null
-          ]
-        );
-
-        // Update item quantity and status
-        await connection.execute(
-          `UPDATE items
-           SET current_quantity = current_quantity + ?,
-               total_in = total_in + ?,
-               status = CASE
-                 WHEN current_quantity + ? > 0 THEN 'in_stock'
-                 ELSE status
-               END
-           WHERE item_id = ?`,
-          [requestData.quantity, requestData.quantity, requestData.quantity, requestData.itemId]
-        );
-
-        // If it's a return, update outbound record
-        if (requestData.inboundType === 'return' && requestData.relatedOutboundId) {
-          await connection.execute(
-            `UPDATE outbound_records
-             SET is_returned = TRUE, actual_return_date = CURDATE()
-             WHERE outbound_id = ?`,
-            [requestData.relatedOutboundId]
+        // Check if this is a "create_unique" mode (new unique code item)
+        if (requestData.mode === 'create_unique') {
+          // Create new item with unique code
+          const [itemResult] = await connection.execute(
+            `INSERT INTO items
+             (unique_code, item_name, category_id, model, specification, is_stackable, current_quantity, total_in, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              requestData.uniqueCode,
+              requestData.itemName,
+              requestData.categoryId,
+              requestData.model || null,
+              requestData.specification || null,
+              requestData.isStackable ? 1 : 0,
+              requestData.initialStock || 1,
+              requestData.initialStock || 1,
+              'in_stock'
+            ]
           );
-        }
 
-        // Log operation
-        await logOperation({
-          operationType: 'inbound',
-          operatorId: req.user.userId,
-          targetType: 'item',
-          targetId: requestData.itemId,
-          operationDetail: {
-            action: 'approved_inbound',
-            inboundId: inboundResult.insertId,
-            quantity: requestData.quantity,
-            inboundType: requestData.inboundType,
-            requestId: parseInt(requestId)
-          },
-          ipAddress: getClientIP(req)
-        });
+          const newItemId = itemResult.insertId;
+
+          // Create inbound record for the new item
+          const [inboundResult] = await connection.execute(
+            `INSERT INTO inbound_records (item_id, quantity, inbound_type, operator_id, remarks)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              newItemId,
+              requestData.initialStock || 1,
+              'initial',
+              request.requester_id,
+              requestData.remarks || null
+            ]
+          );
+
+          // Log operation
+          await logOperation({
+            operationType: 'inbound',
+            operatorId: req.user.userId,
+            targetType: 'item',
+            targetId: newItemId,
+            operationDetail: {
+              action: 'approved_create_unique_item',
+              itemId: newItemId,
+              uniqueCode: requestData.uniqueCode,
+              inboundId: inboundResult.insertId,
+              quantity: requestData.initialStock || 1,
+              requestId: parseInt(requestId)
+            },
+            ipAddress: getClientIP(req)
+          });
+        } else if (requestData.mode === 'update_stackable') {
+          // Update existing stackable item
+          const [inboundResult] = await connection.execute(
+            `INSERT INTO inbound_records (item_id, quantity, inbound_type, related_outbound_id, operator_id, remarks)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+              requestData.itemId,
+              requestData.quantity,
+              requestData.inboundType,
+              requestData.relatedOutboundId || null,
+              request.requester_id,  // Original requester as operator
+              requestData.remarks || null
+            ]
+          );
+
+          // Update item quantity and status
+          await connection.execute(
+            `UPDATE items
+             SET current_quantity = current_quantity + ?,
+                 total_in = total_in + ?,
+                 status = CASE
+                   WHEN current_quantity + ? > 0 THEN 'in_stock'
+                   ELSE status
+                 END
+             WHERE item_id = ?`,
+            [requestData.quantity, requestData.quantity, requestData.quantity, requestData.itemId]
+          );
+
+          // If it's a return, update outbound record
+          if (requestData.inboundType === 'return' && requestData.relatedOutboundId) {
+            await connection.execute(
+              `UPDATE outbound_records
+               SET is_returned = TRUE, actual_return_date = CURDATE()
+               WHERE outbound_id = ?`,
+              [requestData.relatedOutboundId]
+            );
+          }
+
+          // Log operation
+          await logOperation({
+            operationType: 'inbound',
+            operatorId: req.user.userId,
+            targetType: 'item',
+            targetId: requestData.itemId,
+            operationDetail: {
+              action: 'approved_inbound',
+              inboundId: inboundResult.insertId,
+              quantity: requestData.quantity,
+              inboundType: requestData.inboundType,
+              requestId: parseInt(requestId)
+            },
+            ipAddress: getClientIP(req)
+          });
+        } else {
+          // Legacy mode: direct item update (backward compatibility)
+          const [inboundResult] = await connection.execute(
+            `INSERT INTO inbound_records (item_id, quantity, inbound_type, related_outbound_id, operator_id, remarks)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+              requestData.itemId,
+              requestData.quantity,
+              requestData.inboundType,
+              requestData.relatedOutboundId || null,
+              request.requester_id,
+              requestData.remarks || null
+            ]
+          );
+
+          await connection.execute(
+            `UPDATE items
+             SET current_quantity = current_quantity + ?,
+                 total_in = total_in + ?,
+                 status = CASE
+                   WHEN current_quantity + ? > 0 THEN 'in_stock'
+                   ELSE status
+                 END
+             WHERE item_id = ?`,
+            [requestData.quantity, requestData.quantity, requestData.quantity, requestData.itemId]
+          );
+
+          if (requestData.inboundType === 'return' && requestData.relatedOutboundId) {
+            await connection.execute(
+              `UPDATE outbound_records
+               SET is_returned = TRUE, actual_return_date = CURDATE()
+               WHERE outbound_id = ?`,
+              [requestData.relatedOutboundId]
+            );
+          }
+
+          await logOperation({
+            operationType: 'inbound',
+            operatorId: req.user.userId,
+            targetType: 'item',
+            targetId: requestData.itemId,
+            operationDetail: {
+              action: 'approved_inbound',
+              inboundId: inboundResult.insertId,
+              quantity: requestData.quantity,
+              inboundType: requestData.inboundType,
+              requestId: parseInt(requestId)
+            },
+            ipAddress: getClientIP(req)
+          });
+        }
       } else if (request.request_type === 'outbound') {
         // Create outbound record
         const [outboundResult] = await connection.execute(

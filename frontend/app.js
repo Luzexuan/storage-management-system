@@ -135,6 +135,7 @@ function showSection(sectionName) {
       break;
     case 'items':
       loadItems();
+      loadMyBorrowedItems();
       break;
     case 'inbound':
       loadInboundRecords();
@@ -222,6 +223,131 @@ async function loadItems() {
     applySorting();
   } catch (error) {
     showMessage('加载物品列表失败: ' + error.message, 'error');
+  }
+}
+
+// Load user's borrowed items
+async function loadMyBorrowedItems() {
+  const tbody = document.getElementById('my-borrowed-tbody');
+
+  try {
+    const data = await apiRequest(`/outbound?borrower=${currentUser.username}&isReturned=false&limit=1000`);
+    const borrowedItems = data.records || [];
+
+    if (borrowedItems.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-muted">您当前没有借用的物品</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = borrowedItems.map(record => {
+      const borrowDate = new Date(record.outbound_time).toLocaleDateString();
+      const expectedReturn = record.expected_return_date
+        ? new Date(record.expected_return_date).toLocaleDateString()
+        : '未设置';
+
+      const today = new Date();
+      const returnDate = record.expected_return_date ? new Date(record.expected_return_date) : null;
+      const isOverdue = returnDate && returnDate < today;
+      const statusClass = isOverdue ? 'text-danger' : '';
+      const statusText = isOverdue ? '逾期未归还' : '借用中';
+
+      return `
+        <tr>
+          <td>${record.item_name || '未知物品'}</td>
+          <td>${record.unique_code || 'N/A'}</td>
+          <td>${record.quantity}</td>
+          <td>${borrowDate}</td>
+          <td>${expectedReturn}</td>
+          <td class="${statusClass}">${statusText}</td>
+          <td>
+            <button class="btn btn-sm btn-success" onclick="returnBorrowedItem(${record.outbound_id})">归还</button>
+            <button class="btn btn-sm btn-secondary" onclick="convertToTransferFromItems(${record.outbound_id}, ${record.item_id})">转为永久转移</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (error) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-danger">加载借用记录失败</td></tr>';
+    console.error('Failed to load borrowed items:', error);
+  }
+}
+
+// Return a borrowed item from the items management section
+async function returnBorrowedItem(outboundId) {
+  if (!confirm('确定要归还此物品吗？')) {
+    return;
+  }
+
+  try {
+    // Use the quick return logic - submit inbound with return type
+    // First get the outbound record details
+    const outboundData = await apiRequest(`/outbound/${outboundId}`);
+    const record = outboundData.record;
+
+    const isAdmin = currentUser.role === 'admin';
+
+    if (isAdmin) {
+      // Admin directly creates return inbound record
+      await apiRequest('/inbound', {
+        method: 'POST',
+        body: JSON.stringify({
+          itemId: record.item_id,
+          quantity: record.quantity,
+          inboundType: 'return',
+          relatedOutboundId: outboundId,
+          remarks: '归还'
+        })
+      });
+      showMessage('归还成功！', 'success');
+    } else {
+      // Regular user creates approval request
+      await apiRequest('/approvals', {
+        method: 'POST',
+        body: JSON.stringify({
+          requestType: 'inbound',
+          requestData: {
+            mode: 'update_stackable',
+            itemId: record.item_id,
+            quantity: record.quantity,
+            inboundType: 'return',
+            relatedOutboundId: outboundId,
+            remarks: '归还'
+          }
+        })
+      });
+      showMessage('归还申请已提交，等待管理员审批', 'success');
+    }
+
+    // Reload the borrowed items list
+    loadMyBorrowedItems();
+    loadDashboard();
+  } catch (error) {
+    showMessage('归还失败: ' + error.message, 'error');
+  }
+}
+
+// Convert borrowed item to transfer from items management section
+async function convertToTransferFromItems(outboundId, itemId) {
+  if (!confirm('确定要将此借用转为永久转移吗？转移后该物品将不再计入您的借用记录。')) {
+    return;
+  }
+
+  try {
+    await apiRequest(`/outbound/${outboundId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        outboundType: 'transfer',
+        isReturned: null  // Clear return status for transfer
+      })
+    });
+
+    showMessage('已转为永久转移', 'success');
+
+    // Reload the borrowed items list
+    loadMyBorrowedItems();
+    loadDashboard();
+  } catch (error) {
+    showMessage('转换失败: ' + error.message, 'error');
   }
 }
 
@@ -1155,18 +1281,18 @@ async function submitQuickReturn() {
 async function showInboundModal() {
   const isAdmin = currentUser.role === 'admin';
 
-  // Load all items for selection
-  let itemsData;
+  // Load top-level categories
+  let topCategories;
   try {
-    itemsData = await apiRequest('/items?limit=1000');
+    const data = await apiRequest('/categories/top-level');
+    topCategories = data.categories || [];
   } catch (error) {
-    showMessage('Failed to load items: ' + error.message, 'error');
+    showMessage('Failed to load categories: ' + error.message, 'error');
     return;
   }
 
-  const items = itemsData.items || [];
-  const itemOptions = items.map(item =>
-    `<option value="${item.item_id}" data-stackable="${item.is_stackable}">${item.item_name} (${item.unique_code || 'ID:' + item.item_id})</option>`
+  const categoryOptions = topCategories.map(cat =>
+    `<option value="${cat.category_id}" data-name="${cat.category_name}">${cat.category_name}</option>`
   ).join('');
 
   const modalHTML = `
@@ -1174,31 +1300,67 @@ async function showInboundModal() {
       <div class="modal-content">
         <h2>新增入库</h2>
         <form id="inbound-form">
+          <!-- Cascading Category Selection -->
           <div class="form-group">
-            <label>选择物品 *</label>
-            <select id="inbound-item" required>
-              <option value="">请选择物品</option>
-              ${itemOptions}
+            <label>一级分类 *</label>
+            <select id="inbound-category-level1" required>
+              <option value="">请选择一级分类</option>
+              ${categoryOptions}
             </select>
           </div>
 
-          <div class="form-group">
-            <label>入库数量 *</label>
-            <input type="number" id="inbound-quantity" min="1" value="1" required>
-          </div>
-
-          <div class="form-group">
-            <label>入库类型 *</label>
-            <select id="inbound-type" required>
-              <option value="initial">初次入库</option>
-              <option value="return">归还入库</option>
+          <div class="form-group" id="inbound-category-level2-group" style="display: none;">
+            <label>次级分类 *</label>
+            <select id="inbound-category-level2">
+              <option value="">请选择次级分类</option>
             </select>
           </div>
 
-          <div class="form-group" id="related-outbound-group" style="display: none;">
-            <label>关联出库记录ID</label>
-            <input type="number" id="related-outbound-id" min="1">
-            <small>如果是归还，请输入相关的出库记录ID</small>
+          <div class="form-group" id="inbound-category-level3-group" style="display: none;">
+            <label>三级分类 *</label>
+            <select id="inbound-category-level3">
+              <option value="">请选择三级分类</option>
+            </select>
+          </div>
+
+          <!-- Mode 1: Unique Code Input (for non-stackable items) -->
+          <div id="unique-code-mode" style="display: none;">
+            <div class="form-group">
+              <label>唯一编号 *</label>
+              <input type="text" id="inbound-unique-code" placeholder="例如: Computer-A-12345">
+              <small>为该物品分配一个唯一的编号</small>
+            </div>
+
+            <div class="form-group">
+              <label>物品名称 *</label>
+              <input type="text" id="inbound-item-name" placeholder="例如: Dell XPS 15">
+            </div>
+
+            <div class="form-group">
+              <label>型号</label>
+              <input type="text" id="inbound-item-model" placeholder="例如: XPS 15 9500">
+            </div>
+
+            <div class="form-group">
+              <label>规格说明</label>
+              <textarea id="inbound-item-spec" rows="2" placeholder="例如: i7-10750H, 16GB RAM, 512GB SSD"></textarea>
+            </div>
+          </div>
+
+          <!-- Mode 2: Item Selection (for stackable items) -->
+          <div id="item-selection-mode" style="display: none;">
+            <div class="form-group">
+              <label>选择物品 *</label>
+              <select id="inbound-existing-item">
+                <option value="">请先选择分类</option>
+              </select>
+              <small>从该分类下已有的物品中选择</small>
+            </div>
+
+            <div class="form-group">
+              <label>入库数量 *</label>
+              <input type="number" id="inbound-quantity" min="1" value="1">
+            </div>
           </div>
 
           <div class="form-group">
@@ -1219,11 +1381,8 @@ async function showInboundModal() {
 
   document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-  // Event listeners
-  document.getElementById('inbound-type').addEventListener('change', (e) => {
-    const relatedGroup = document.getElementById('related-outbound-group');
-    relatedGroup.style.display = e.target.value === 'return' ? 'block' : 'none';
-  });
+  // Setup cascading category selection for inbound
+  setupInboundCascadingCategories();
 
   document.getElementById('inbound-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1231,49 +1390,260 @@ async function showInboundModal() {
   });
 }
 
+// Setup cascading category selection for inbound modal
+function setupInboundCascadingCategories() {
+  const level1Select = document.getElementById('inbound-category-level1');
+  const level2Group = document.getElementById('inbound-category-level2-group');
+  const level2Select = document.getElementById('inbound-category-level2');
+  const level3Group = document.getElementById('inbound-category-level3-group');
+  const level3Select = document.getElementById('inbound-category-level3');
+
+  const uniqueCodeMode = document.getElementById('unique-code-mode');
+  const itemSelectionMode = document.getElementById('item-selection-mode');
+  const existingItemSelect = document.getElementById('inbound-existing-item');
+
+  let selectedCategoryId = null;
+  let isStackable = false;
+
+  // Level 1 change handler
+  level1Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    // Reset downstream selections
+    level2Select.innerHTML = '<option value="">请选择次级分类</option>';
+    level3Select.innerHTML = '<option value="">请选择三级分类</option>';
+    level2Group.style.display = 'none';
+    level3Group.style.display = 'none';
+    uniqueCodeMode.style.display = 'none';
+    itemSelectionMode.style.display = 'none';
+    existingItemSelect.innerHTML = '<option value="">请先选择完整分类路径</option>';
+
+    if (!categoryId) return;
+
+    // Load level 2 categories
+    try {
+      const data = await apiRequest(`/categories/${categoryId}/children`);
+      if (data.children && data.children.length > 0) {
+        data.children.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.category_id;
+          option.textContent = cat.category_name;
+          option.dataset.name = cat.category_name;
+          level2Select.appendChild(option);
+        });
+        level2Group.style.display = 'block';
+      } else {
+        // No children - this is the final category
+        await handleFinalCategorySelection(categoryId);
+      }
+    } catch (error) {
+      showMessage('加载次级分类失败: ' + error.message, 'error');
+    }
+  });
+
+  // Level 2 change handler
+  level2Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    // Reset downstream selections
+    level3Select.innerHTML = '<option value="">请选择三级分类</option>';
+    level3Group.style.display = 'none';
+    uniqueCodeMode.style.display = 'none';
+    itemSelectionMode.style.display = 'none';
+    existingItemSelect.innerHTML = '<option value="">请先选择完整分类路径</option>';
+
+    if (!categoryId) return;
+
+    // Load level 3 categories
+    try {
+      const data = await apiRequest(`/categories/${categoryId}/children`);
+      if (data.children && data.children.length > 0) {
+        data.children.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.category_id;
+          option.textContent = cat.category_name;
+          option.dataset.name = cat.category_name;
+          level3Select.appendChild(option);
+        });
+        level3Group.style.display = 'block';
+      } else {
+        // No children - this is the final category
+        await handleFinalCategorySelection(categoryId);
+      }
+    } catch (error) {
+      showMessage('加载三级分类失败: ' + error.message, 'error');
+    }
+  });
+
+  // Level 3 change handler
+  level3Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    uniqueCodeMode.style.display = 'none';
+    itemSelectionMode.style.display = 'none';
+    existingItemSelect.innerHTML = '<option value="">请先选择完整分类路径</option>';
+
+    if (!categoryId) return;
+
+    await handleFinalCategorySelection(categoryId);
+  });
+
+  // Handle final category selection - determine mode and load items
+  async function handleFinalCategorySelection(categoryId) {
+    selectedCategoryId = categoryId;
+
+    try {
+      // Get category details to check if stackable
+      const categoryData = await apiRequest(`/categories/${categoryId}`);
+      isStackable = categoryData.category.is_stackable === 1;
+
+      if (isStackable) {
+        // Stackable items: Show item selection mode
+        itemSelectionMode.style.display = 'block';
+        uniqueCodeMode.style.display = 'none';
+
+        // Load existing items in this category
+        const itemsData = await apiRequest(`/items?categoryId=${categoryId}`);
+        existingItemSelect.innerHTML = '<option value="">请选择物品</option>';
+
+        if (itemsData.items && itemsData.items.length > 0) {
+          itemsData.items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.item_id;
+            option.textContent = `${item.item_name}${item.model ? ' - ' + item.model : ''} (当前库存: ${item.quantity})`;
+            existingItemSelect.appendChild(option);
+          });
+        } else {
+          existingItemSelect.innerHTML = '<option value="">该分类下暂无物品</option>';
+        }
+      } else {
+        // Non-stackable items: Show unique code input mode
+        uniqueCodeMode.style.display = 'block';
+        itemSelectionMode.style.display = 'none';
+      }
+    } catch (error) {
+      showMessage('加载分类信息失败: ' + error.message, 'error');
+    }
+  }
+}
+
 async function submitInbound() {
   const isAdmin = currentUser.role === 'admin';
-  const itemId = document.getElementById('inbound-item').value;
-  const quantity = parseInt(document.getElementById('inbound-quantity').value);
-  const inboundType = document.getElementById('inbound-type').value;
-  const relatedOutboundId = document.getElementById('related-outbound-id').value;
   const remarks = document.getElementById('inbound-remarks').value;
 
-  if (!itemId || !quantity || !inboundType) {
-    showMessage('Please fill in all required fields', 'error');
+  // Determine which mode is active
+  const uniqueCodeMode = document.getElementById('unique-code-mode');
+  const itemSelectionMode = document.getElementById('item-selection-mode');
+
+  const isUniqueCodeMode = uniqueCodeMode && uniqueCodeMode.style.display !== 'none';
+  const isItemSelectionMode = itemSelectionMode && itemSelectionMode.style.display !== 'none';
+
+  if (!isUniqueCodeMode && !isItemSelectionMode) {
+    showMessage('请先选择完整的分类路径', 'error');
     return;
   }
 
   try {
-    if (isAdmin) {
-      // Admin directly creates inbound record
-      await apiRequest('/inbound', {
-        method: 'POST',
-        body: JSON.stringify({
-          itemId: parseInt(itemId),
-          quantity,
-          inboundType,
-          relatedOutboundId: relatedOutboundId ? parseInt(relatedOutboundId) : null,
-          remarks
-        })
-      });
-      showMessage('入库成功！', 'success');
-    } else {
-      // Regular user creates approval request
-      await apiRequest('/approvals', {
-        method: 'POST',
-        body: JSON.stringify({
-          requestType: 'inbound',
-          requestData: {
+    if (isUniqueCodeMode) {
+      // Unique code mode: Create new item with initial inbound
+      const uniqueCode = document.getElementById('inbound-unique-code').value.trim();
+      const itemName = document.getElementById('inbound-item-name').value.trim();
+      const model = document.getElementById('inbound-item-model').value.trim();
+      const specification = document.getElementById('inbound-item-spec').value.trim();
+
+      if (!uniqueCode || !itemName) {
+        showMessage('请填写唯一编号和物品名称', 'error');
+        return;
+      }
+
+      // Get selected category ID
+      const level3Select = document.getElementById('inbound-category-level3');
+      const level2Select = document.getElementById('inbound-category-level2');
+      const level1Select = document.getElementById('inbound-category-level1');
+
+      const categoryId = level3Select.value || level2Select.value || level1Select.value;
+
+      if (!categoryId) {
+        showMessage('请选择分类', 'error');
+        return;
+      }
+
+      if (isAdmin) {
+        // Admin directly creates item with initial inbound
+        await apiRequest('/items', {
+          method: 'POST',
+          body: JSON.stringify({
+            uniqueCode,
+            itemName,
+            categoryId: parseInt(categoryId),
+            model,
+            specification,
+            isStackable: false,
+            initialStock: 1, // Unique code items always have quantity 1
+            remarks
+          })
+        });
+        showMessage('物品创建并入库成功！', 'success');
+      } else {
+        // Regular user creates approval request for new item creation
+        await apiRequest('/approvals', {
+          method: 'POST',
+          body: JSON.stringify({
+            requestType: 'inbound',
+            requestData: {
+              mode: 'create_unique',
+              uniqueCode,
+              itemName,
+              categoryId: parseInt(categoryId),
+              model,
+              specification,
+              isStackable: false,
+              initialStock: 1,
+              remarks
+            }
+          })
+        });
+        showMessage('入库申请已提交，等待管理员审批', 'success');
+      }
+    } else if (isItemSelectionMode) {
+      // Item selection mode: Update existing stackable item
+      const itemId = document.getElementById('inbound-existing-item').value;
+      const quantity = parseInt(document.getElementById('inbound-quantity').value);
+
+      if (!itemId || !quantity || quantity < 1) {
+        showMessage('请选择物品并填写有效数量', 'error');
+        return;
+      }
+
+      if (isAdmin) {
+        // Admin directly creates inbound record
+        await apiRequest('/inbound', {
+          method: 'POST',
+          body: JSON.stringify({
             itemId: parseInt(itemId),
             quantity,
-            inboundType,
-            relatedOutboundId: relatedOutboundId ? parseInt(relatedOutboundId) : null,
+            inboundType: 'initial',
             remarks
-          }
-        })
-      });
-      showMessage('入库申请已提交，等待管理员审批', 'success');
+          })
+        });
+        showMessage('入库成功！', 'success');
+      } else {
+        // Regular user creates approval request
+        await apiRequest('/approvals', {
+          method: 'POST',
+          body: JSON.stringify({
+            requestType: 'inbound',
+            requestData: {
+              mode: 'update_stackable',
+              itemId: parseInt(itemId),
+              quantity,
+              inboundType: 'initial',
+              remarks
+            }
+          })
+        });
+        showMessage('入库申请已提交，等待管理员审批', 'success');
+      }
     }
 
     closeModal('inbound-modal');
@@ -1292,97 +1662,290 @@ async function submitInbound() {
 async function showOutboundModal() {
   const isAdmin = currentUser.role === 'admin';
 
-  // Load all items for selection
-  let itemsData;
+  // Load top-level categories
+  let topCategories;
   try {
-    itemsData = await apiRequest('/items?limit=1000');
+    const data = await apiRequest('/categories/top-level');
+    topCategories = data.categories || [];
   } catch (error) {
-    showMessage('Failed to load items: ' + error.message, 'error');
+    showMessage('Failed to load categories: ' + error.message, 'error');
     return;
   }
 
-  const items = itemsData.items || [];
-  const itemOptions = items.map(item =>
-    `<option value="${item.item_id}" data-quantity="${item.current_quantity}">${item.item_name} (库存: ${item.current_quantity})</option>`
+  // Load user's borrowed items
+  let borrowedItems = [];
+  try {
+    const outboundData = await apiRequest(`/outbound?borrower=${currentUser.username}&isReturned=false`);
+    borrowedItems = outboundData.records || [];
+  } catch (error) {
+    console.warn('Failed to load borrowed items:', error);
+  }
+
+  const categoryOptions = topCategories.map(cat =>
+    `<option value="${cat.category_id}" data-name="${cat.category_name}">${cat.category_name}</option>`
   ).join('');
+
+  const borrowedItemsHTML = borrowedItems.length > 0 ? borrowedItems.map(record => `
+    <div class="borrowed-item-card" data-outbound-id="${record.outbound_id}" data-item-id="${record.item_id}">
+      <div class="borrowed-item-info">
+        <h4>${record.item_name || '未知物品'}</h4>
+        <p>唯一编号: ${record.unique_code || 'N/A'}</p>
+        <p>借用数量: ${record.quantity}</p>
+        <p>借出时间: ${new Date(record.outbound_date).toLocaleDateString()}</p>
+        <p>预计归还: ${record.expected_return_date ? new Date(record.expected_return_date).toLocaleDateString() : '未设置'}</p>
+      </div>
+      <div class="borrowed-item-actions">
+        <button type="button" class="btn btn-sm btn-success" onclick="convertToTransfer(${record.outbound_id}, ${record.item_id})">转为永久转移</button>
+      </div>
+    </div>
+  `).join('') : '<p class="text-muted">您当前没有借用的物品</p>';
 
   const modalHTML = `
     <div id="outbound-modal" class="modal active">
-      <div class="modal-content">
+      <div class="modal-content modal-large">
         <h2>新增出库</h2>
-        <form id="outbound-form">
-          <div class="form-group">
-            <label>选择物品 *</label>
-            <select id="outbound-item" required>
-              <option value="">请选择物品</option>
-              ${itemOptions}
-            </select>
-          </div>
 
-          <div class="form-group">
-            <label>出库数量 *</label>
-            <input type="number" id="outbound-quantity" min="1" value="1" required>
-            <small id="available-quantity"></small>
-          </div>
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+          <button class="tab-btn active" onclick="switchOutboundTab('new-outbound')">新增出库</button>
+          <button class="tab-btn" onclick="switchOutboundTab('my-borrowed')">我的借用</button>
+        </div>
 
-          <div class="form-group">
-            <label>出库类型 *</label>
-            <select id="outbound-type" required>
-              <option value="transfer">永久转移</option>
-              <option value="borrow">暂时借用</option>
-            </select>
-          </div>
-
-          <div id="borrow-fields" style="display: none;">
+        <!-- Tab 1: New Outbound -->
+        <div id="tab-new-outbound" class="tab-content active">
+          <form id="outbound-form">
+            <!-- Cascading Category Selection -->
             <div class="form-group">
-              <label>借用人姓名 *</label>
-              <input type="text" id="borrower-name">
+              <label>一级分类 *</label>
+              <select id="outbound-category-level1" required>
+                <option value="">请选择一级分类</option>
+                ${categoryOptions}
+              </select>
             </div>
 
-            <div class="form-group">
-              <label>借用人电话 *</label>
-              <input type="tel" id="borrower-phone">
+            <div class="form-group" id="outbound-category-level2-group" style="display: none;">
+              <label>次级分类 *</label>
+              <select id="outbound-category-level2">
+                <option value="">请选择次级分类</option>
+              </select>
             </div>
 
-            <div class="form-group">
-              <label>借用人邮箱 *</label>
-              <input type="email" id="borrower-email">
+            <div class="form-group" id="outbound-category-level3-group" style="display: none;">
+              <label>三级分类 *</label>
+              <select id="outbound-category-level3">
+                <option value="">请选择三级分类</option>
+              </select>
             </div>
 
-            <div class="form-group">
-              <label>预计归还日期 *</label>
-              <input type="date" id="expected-return-date">
+            <!-- Item Selection (shown after category is selected) -->
+            <div id="item-selection" style="display: none;">
+              <div class="form-group">
+                <label>选择物品 *</label>
+                <select id="outbound-item">
+                  <option value="">请先选择完整分类路径</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>出库数量 *</label>
+                <input type="number" id="outbound-quantity" min="1" value="1">
+                <small id="available-quantity"></small>
+              </div>
+
+              <div class="form-group">
+                <label>出库类型 *</label>
+                <select id="outbound-type">
+                  <option value="transfer">永久转移</option>
+                  <option value="borrow">暂时借用</option>
+                </select>
+              </div>
+
+              <div id="borrow-fields" style="display: none;">
+                <div class="form-group">
+                  <label>借用人姓名 *</label>
+                  <input type="text" id="borrower-name">
+                </div>
+
+                <div class="form-group">
+                  <label>借用人电话 *</label>
+                  <input type="tel" id="borrower-phone">
+                </div>
+
+                <div class="form-group">
+                  <label>借用人邮箱 *</label>
+                  <input type="email" id="borrower-email">
+                </div>
+
+                <div class="form-group">
+                  <label>预计归还日期 *</label>
+                  <input type="date" id="expected-return-date">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>备注</label>
+                <textarea id="outbound-remarks" rows="3"></textarea>
+              </div>
             </div>
+
+            ${!isAdmin ? '<p class="text-warning">注意：您的出库请求需要管理员审批后才会生效</p>' : ''}
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">${isAdmin ? '确认出库' : '提交申请'}</button>
+              <button type="button" class="btn btn-secondary" onclick="closeModal('outbound-modal')">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Tab 2: My Borrowed Items -->
+        <div id="tab-my-borrowed" class="tab-content">
+          <div class="borrowed-items-container">
+            ${borrowedItemsHTML}
           </div>
-
-          <div class="form-group">
-            <label>备注</label>
-            <textarea id="outbound-remarks" rows="3"></textarea>
-          </div>
-
-          ${!isAdmin ? '<p class="text-warning">注意：您的出库请求需要管理员审批后才会生效</p>' : ''}
-
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">${isAdmin ? '确认出库' : '提交申请'}</button>
-            <button type="button" class="btn btn-secondary" onclick="closeModal('outbound-modal')">取消</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal('outbound-modal')">关闭</button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   `;
 
   document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-  // Event listeners
-  document.getElementById('outbound-item').addEventListener('change', (e) => {
+  // Setup cascading categories and event listeners
+  setupOutboundCascadingCategories();
+
+  document.getElementById('outbound-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitOutbound();
+  });
+}
+
+// Setup cascading category selection for outbound modal
+function setupOutboundCascadingCategories() {
+  const level1Select = document.getElementById('outbound-category-level1');
+  const level2Group = document.getElementById('outbound-category-level2-group');
+  const level2Select = document.getElementById('outbound-category-level2');
+  const level3Group = document.getElementById('outbound-category-level3-group');
+  const level3Select = document.getElementById('outbound-category-level3');
+
+  const itemSelection = document.getElementById('item-selection');
+  const outboundItemSelect = document.getElementById('outbound-item');
+  const quantityDisplay = document.getElementById('available-quantity');
+  const outboundTypeSelect = document.getElementById('outbound-type');
+  const borrowFields = document.getElementById('borrow-fields');
+
+  // Level 1 change handler
+  level1Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    // Reset downstream selections
+    level2Select.innerHTML = '<option value="">请选择次级分类</option>';
+    level3Select.innerHTML = '<option value="">请选择三级分类</option>';
+    level2Group.style.display = 'none';
+    level3Group.style.display = 'none';
+    itemSelection.style.display = 'none';
+    outboundItemSelect.innerHTML = '<option value="">请先选择完整分类路径</option>';
+
+    if (!categoryId) return;
+
+    // Load level 2 categories
+    try {
+      const data = await apiRequest(`/categories/${categoryId}/children`);
+      if (data.children && data.children.length > 0) {
+        data.children.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.category_id;
+          option.textContent = cat.category_name;
+          level2Select.appendChild(option);
+        });
+        level2Group.style.display = 'block';
+      } else {
+        // No children - load items
+        await loadOutboundItems(categoryId);
+      }
+    } catch (error) {
+      showMessage('加载次级分类失败: ' + error.message, 'error');
+    }
+  });
+
+  // Level 2 change handler
+  level2Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    // Reset downstream selections
+    level3Select.innerHTML = '<option value="">请选择三级分类</option>';
+    level3Group.style.display = 'none';
+    itemSelection.style.display = 'none';
+    outboundItemSelect.innerHTML = '<option value="">请先选择完整分类路径</option>';
+
+    if (!categoryId) return;
+
+    // Load level 3 categories
+    try {
+      const data = await apiRequest(`/categories/${categoryId}/children`);
+      if (data.children && data.children.length > 0) {
+        data.children.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat.category_id;
+          option.textContent = cat.category_name;
+          level3Select.appendChild(option);
+        });
+        level3Group.style.display = 'block';
+      } else {
+        // No children - load items
+        await loadOutboundItems(categoryId);
+      }
+    } catch (error) {
+      showMessage('加载三级分类失败: ' + error.message, 'error');
+    }
+  });
+
+  // Level 3 change handler
+  level3Select.addEventListener('change', async (e) => {
+    const categoryId = e.target.value;
+
+    itemSelection.style.display = 'none';
+    outboundItemSelect.innerHTML = '<option value="">请先选择完整分类路径</option>';
+
+    if (!categoryId) return;
+
+    await loadOutboundItems(categoryId);
+  });
+
+  // Load items for selected category
+  async function loadOutboundItems(categoryId) {
+    try {
+      const itemsData = await apiRequest(`/items?categoryId=${categoryId}`);
+      outboundItemSelect.innerHTML = '<option value="">请选择物品</option>';
+
+      if (itemsData.items && itemsData.items.length > 0) {
+        itemsData.items.forEach(item => {
+          const option = document.createElement('option');
+          option.value = item.item_id;
+          option.dataset.quantity = item.current_quantity;
+          option.textContent = `${item.item_name}${item.unique_code ? ' - ' + item.unique_code : ''}${item.model ? ' - ' + item.model : ''} (库存: ${item.current_quantity})`;
+          outboundItemSelect.appendChild(option);
+        });
+        itemSelection.style.display = 'block';
+      } else {
+        outboundItemSelect.innerHTML = '<option value="">该分类下暂无物品</option>';
+        itemSelection.style.display = 'block';
+      }
+    } catch (error) {
+      showMessage('加载物品失败: ' + error.message, 'error');
+    }
+  }
+
+  // Item selection handler - show available quantity
+  outboundItemSelect.addEventListener('change', (e) => {
     const selectedOption = e.target.options[e.target.selectedIndex];
     const quantity = selectedOption.dataset.quantity || 0;
-    const quantityDisplay = document.getElementById('available-quantity');
     quantityDisplay.textContent = `可用库存: ${quantity}`;
   });
 
-  document.getElementById('outbound-type').addEventListener('change', (e) => {
-    const borrowFields = document.getElementById('borrow-fields');
+  // Outbound type change handler
+  outboundTypeSelect.addEventListener('change', (e) => {
     const isBorrow = e.target.value === 'borrow';
     borrowFields.style.display = isBorrow ? 'block' : 'none';
 
@@ -1394,11 +1957,67 @@ async function showOutboundModal() {
       }
     });
   });
+}
 
-  document.getElementById('outbound-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await submitOutbound();
+// Switch between tabs in outbound modal
+function switchOutboundTab(tabName) {
+  const tabs = document.querySelectorAll('#outbound-modal .tab-content');
+  const buttons = document.querySelectorAll('#outbound-modal .tab-btn');
+
+  tabs.forEach(tab => {
+    tab.classList.remove('active');
   });
+
+  buttons.forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  const targetTab = document.getElementById(`tab-${tabName}`);
+  if (targetTab) {
+    targetTab.classList.add('active');
+  }
+
+  // Find and activate the corresponding button
+  buttons.forEach(btn => {
+    if (btn.textContent.includes(tabName === 'new-outbound' ? '新增出库' : '我的借用')) {
+      btn.classList.add('active');
+    }
+  });
+}
+
+// Convert borrowed item to permanent transfer
+async function convertToTransfer(outboundId, itemId) {
+  if (!confirm('确定要将此借用转为永久转移吗？转移后该物品将不再计入您的借用记录。')) {
+    return;
+  }
+
+  try {
+    await apiRequest(`/outbound/${outboundId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        outboundType: 'transfer',
+        isReturned: null  // Clear return status for transfer
+      })
+    });
+
+    showMessage('已转为永久转移', 'success');
+
+    // Remove the card from the UI
+    const card = document.querySelector(`.borrowed-item-card[data-outbound-id="${outboundId}"]`);
+    if (card) {
+      card.remove();
+    }
+
+    // Check if no more borrowed items
+    const container = document.querySelector('.borrowed-items-container');
+    if (container && container.querySelectorAll('.borrowed-item-card').length === 0) {
+      container.innerHTML = '<p class="text-muted">您当前没有借用的物品</p>';
+    }
+
+    loadDashboard();
+  } catch (error) {
+    showMessage('转换失败: ' + error.message, 'error');
+  }
 }
 
 async function submitOutbound() {
@@ -1994,6 +2613,7 @@ function showSection(sectionName) {
       break;
     case 'items':
       loadItems();
+      loadMyBorrowedItems();
       break;
     case 'inbound':
       loadInboundRecords();

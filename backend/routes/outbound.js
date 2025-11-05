@@ -6,12 +6,12 @@ const { logOperation, getClientIP } = require('../utils/logger');
 
 // Get all outbound records
 router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
-  const { itemId, isReturned, page = 1, limit = 20 } = req.query;
+  const { itemId, isReturned, borrower, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
 
   try {
     let sql = `
-      SELECT obr.*, i.item_name, i.unique_code as item_code, u.username as operator_name
+      SELECT obr.*, i.item_name, i.unique_code, u.username as operator_name
       FROM outbound_records obr
       LEFT JOIN items i ON obr.item_id = i.item_id
       LEFT JOIN users u ON obr.operator_id = u.user_id
@@ -27,6 +27,11 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
     if (isReturned !== undefined) {
       sql += ' AND obr.is_returned = ?';
       params.push(isReturned === 'true' ? 1 : 0);
+    }
+
+    if (borrower) {
+      sql += ' AND obr.borrower_name = ?';
+      params.push(borrower);
     }
 
     // Get total count
@@ -257,6 +262,84 @@ router.get('/:outboundId', verifyToken, verifyActiveUser, async (req, res) => {
   } catch (error) {
     console.error('Failed to get outbound record details:', error);
     res.status(500).json({ error: 'Failed to get outbound record details' });
+  }
+});
+
+// Update outbound record (e.g., convert borrow to transfer)
+router.put('/:outboundId', verifyToken, verifyActiveUser, async (req, res) => {
+  const { outboundId } = req.params;
+  const { outboundType, isReturned } = req.body;
+
+  try {
+    // Get the outbound record to verify ownership
+    const [records] = await db.execute(
+      'SELECT * FROM outbound_records WHERE outbound_id = ?',
+      [outboundId]
+    );
+
+    if (records.length === 0) {
+      return res.status(404).json({ error: 'Outbound record not found' });
+    }
+
+    const record = records[0];
+
+    // Verify that the user is either the operator or an admin
+    const isAdmin = req.user.role === 'admin';
+    const isOperator = record.operator_id === req.user.userId;
+
+    if (!isAdmin && !isOperator) {
+      return res.status(403).json({ error: 'You do not have permission to update this outbound record' });
+    }
+
+    // Build update query
+    const updates = [];
+    const params = [];
+
+    if (outboundType !== undefined) {
+      updates.push('outbound_type = ?');
+      params.push(outboundType);
+    }
+
+    if (isReturned !== undefined) {
+      updates.push('is_returned = ?');
+      params.push(isReturned);
+
+      // If marking as returned, set actual return date
+      if (isReturned) {
+        updates.push('actual_return_date = CURDATE()');
+      } else {
+        updates.push('actual_return_date = NULL');
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    params.push(outboundId);
+
+    await db.execute(
+      `UPDATE outbound_records SET ${updates.join(', ')} WHERE outbound_id = ?`,
+      params
+    );
+
+    // Log operation
+    await logOperation({
+      operationType: 'outbound',
+      operatorId: req.user.userId,
+      targetType: 'outbound_record',
+      targetId: parseInt(outboundId),
+      operationDetail: {
+        action: 'update_outbound',
+        updates: { outboundType, isReturned }
+      },
+      ipAddress: getClientIP(req)
+    });
+
+    res.json({ message: 'Outbound record updated successfully' });
+  } catch (error) {
+    console.error('Failed to update outbound record:', error);
+    res.status(500).json({ error: 'Failed to update outbound record' });
   }
 });
 
