@@ -322,6 +322,15 @@ body.is-admin .toolbar.admin-only {
   display: flex !important;
 }
 
+/* Section visibility - admin sections still need active class to show */
+body.is-admin .section.admin-only {
+  display: none !important;
+}
+
+body.is-admin .section.admin-only.active {
+  display: block !important;
+}
+
 /* 模态框 */
 .modal {
   display: none;
