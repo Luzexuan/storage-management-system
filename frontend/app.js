@@ -963,11 +963,13 @@ function setupCascadingCategoriesAndStackable() {
       // Directly update form fields
       updateFormFieldsForStackable(false);
     } else {
-      // Other categories: show checkbox and let user choose
+      // Other categories: default to non-stackable but allow user to change
+      // Reset to unchecked (unique code) when switching to other categories
+      stackableCheckbox.checked = false;
       stackableCheckbox.disabled = false;
       stackableGroup.style.display = 'block';
-      // Update form fields based on current checkbox state
-      updateFormFieldsForStackable(stackableCheckbox.checked);
+      // Update form fields to show unique code input
+      updateFormFieldsForStackable(false);
     }
   });
 
