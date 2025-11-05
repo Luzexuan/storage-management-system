@@ -80,12 +80,12 @@
           <li><a href="#" onclick="showSection('inbound')">入库管理</a></li>
           <li><a href="#" onclick="showSection('outbound')">出库管理</a></li>
           <li><a href="#" onclick="showSection('categories')">分类管理</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('approvals')">审批管理</a></li>
           <li><a href="#" onclick="showSection('logs')">操作日志</a></li>
           <li class="admin-only"><a href="#" onclick="showSection('users')">用户管理</a></li>
           <li><a href="#" onclick="showSection('profile')">个人信息</a></li>
         </ul>
       </aside>
-
       <!-- 主内容区 -->
       <main class="content">
         <!-- 仪表盘 -->
@@ -128,7 +128,17 @@
         <section id="items-section" class="section">
           <h2>物品管理</h2>
           <div class="toolbar">
-            <button class="btn btn-primary" onclick="showAddItemModal()">新增物品</button>
+            <button class="btn btn-primary admin-only" onclick="showAddItemModal()">新增物品</button>
+            <button class="btn btn-success" id="show-all-items-btn" onclick="toggleShowAllItems()">显示所有物品</button>
+            <select id="sort-by" class="btn btn-secondary" onchange="sortItems()">
+              <option value="">排序方式</option>
+              <option value="name-asc">名称升序</option>
+              <option value="name-desc">名称降序</option>
+              <option value="quantity-asc">库存升序</option>
+              <option value="quantity-desc">库存降序</option>
+              <option value="created-asc">创建时间升序</option>
+              <option value="created-desc">创建时间降序</option>
+            </select>
             <input type="text" id="item-search" placeholder="搜索物品..." onkeyup="searchItems()">
           </div>
           <table id="items-table" class="data-table">
@@ -220,6 +230,32 @@
               </tr>
             </thead>
             <tbody id="logs-tbody">
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 审批管理（仅管理员）-->
+        <section id="approvals-section" class="section admin-only">
+          <h2>审批管理</h2>
+          <div class="toolbar">
+            <button class="btn btn-secondary" onclick="loadApprovals('pending')">待审批</button>
+            <button class="btn btn-secondary" onclick="loadApprovals('approved')">已通过</button>
+            <button class="btn btn-secondary" onclick="loadApprovals('rejected')">已拒绝</button>
+            <button class="btn btn-primary" onclick="loadApprovals()">全部</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>申请类型</th>
+                <th>申请人</th>
+                <th>物品信息</th>
+                <th>数量</th>
+                <th>状态</th>
+                <th>申请时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="approvals-tbody">
             </tbody>
           </table>
         </section>

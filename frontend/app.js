@@ -148,6 +148,9 @@ function showSection(sectionName) {
     case 'logs':
       loadLogs();
       break;
+    case 'approvals':
+      loadApprovals();
+      break;
     case 'users':
       loadUsers();
       break;
@@ -200,13 +203,100 @@ function displayRecentLogs(logs) {
 
 // ========== 物品管理 ==========
 
+let allItemsLoaded = false;
+let currentItems = [];
+
 async function loadItems() {
+  // Don't load items automatically - wait for user to click "Show All Items"
+  const tbody = document.getElementById('items-tbody');
+  if (!allItemsLoaded) {
+    tbody.innerHTML = '<tr><td colspan="7">点击"显示所有物品"按钮加载物品列表</td></tr>';
+    return;
+  }
+
   try {
-    const data = await apiRequest('/items');
-    displayItems(data.items);
+    const data = await apiRequest('/items?limit=10000');
+    currentItems = data.items;
+    applySorting();
   } catch (error) {
     showMessage('加载物品列表失败: ' + error.message, 'error');
   }
+}
+
+async function toggleShowAllItems() {
+  const btn = document.getElementById('show-all-items-btn');
+
+  if (!allItemsLoaded) {
+    // Load items
+    allItemsLoaded = true;
+    btn.textContent = '隐藏物品列表';
+    btn.classList.remove('btn-success');
+    btn.classList.add('btn-secondary');
+
+    try {
+      const data = await apiRequest('/items?limit=10000');
+      currentItems = data.items;
+      applySorting();
+    } catch (error) {
+      showMessage('加载物品列表失败: ' + error.message, 'error');
+      allItemsLoaded = false;
+      btn.textContent = '显示所有物品';
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-success');
+    }
+  } else {
+    // Hide items
+    allItemsLoaded = false;
+    currentItems = [];
+    btn.textContent = '显示所有物品';
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-success');
+
+    const tbody = document.getElementById('items-tbody');
+    tbody.innerHTML = '<tr><td colspan="7">点击"显示所有物品"按钮加载物品列表</td></tr>';
+  }
+}
+
+function sortItems() {
+  if (!allItemsLoaded || currentItems.length === 0) {
+    return;
+  }
+
+  applySorting();
+}
+
+function applySorting() {
+  const sortBy = document.getElementById('sort-by').value;
+
+  if (!sortBy) {
+    displayItems(currentItems);
+    return;
+  }
+
+  const sorted = [...currentItems];
+
+  switch (sortBy) {
+    case 'name-asc':
+      sorted.sort((a, b) => a.item_name.localeCompare(b.item_name));
+      break;
+    case 'name-desc':
+      sorted.sort((a, b) => b.item_name.localeCompare(a.item_name));
+      break;
+    case 'quantity-asc':
+      sorted.sort((a, b) => a.current_quantity - b.current_quantity);
+      break;
+    case 'quantity-desc':
+      sorted.sort((a, b) => b.current_quantity - a.current_quantity);
+      break;
+    case 'created-asc':
+      sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      break;
+    case 'created-desc':
+      sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      break;
+  }
+
+  displayItems(sorted);
 }
 
 function displayItems(items) {
@@ -235,10 +325,22 @@ function displayItems(items) {
 }
 
 async function searchItems() {
+  if (!allItemsLoaded) {
+    showMessage('请先点击"显示所有物品"按钮', 'info');
+    return;
+  }
+
   const search = document.getElementById('item-search').value;
+
+  if (!search) {
+    applySorting();
+    return;
+  }
+
   try {
-    const data = await apiRequest(`/items?search=${encodeURIComponent(search)}`);
-    displayItems(data.items);
+    const data = await apiRequest(`/items?search=${encodeURIComponent(search)}&limit=10000`);
+    currentItems = data.items;
+    applySorting();
   } catch (error) {
     showMessage('搜索失败: ' + error.message, 'error');
   }
@@ -352,6 +454,178 @@ function displayLogs(logs) {
     </tr>`;
   });
   tbody.innerHTML = html;
+}
+
+// ========== 审批管理 ==========
+
+async function loadApprovals(status = null) {
+  if (currentUser.role !== 'admin') return;
+
+  try {
+    let url = '/approvals';
+    if (status) {
+      url += `?status=${status}`;
+    }
+
+    const data = await apiRequest(url);
+    displayApprovals(data.requests || []);
+  } catch (error) {
+    showMessage('Failed to load approval requests: ' + error.message, 'error');
+  }
+}
+
+async function displayApprovals(requests) {
+  const tbody = document.getElementById('approvals-tbody');
+
+  if (requests.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7">No approval requests</td></tr>';
+    return;
+  }
+
+  // Fetch item information for all requests
+  const itemIds = [...new Set(requests.map(r => r.request_data.itemId))];
+  const itemsMap = {};
+
+  try {
+    await Promise.all(itemIds.map(async (itemId) => {
+      const itemData = await apiRequest(`/items/${itemId}`);
+      itemsMap[itemId] = itemData.item;
+    }));
+  } catch (error) {
+    console.error('Failed to load item details:', error);
+  }
+
+  let html = '';
+  requests.forEach(req => {
+    const item = itemsMap[req.request_data.itemId];
+    const itemInfo = item ? `${item.item_name} (${item.unique_code || 'ID:' + item.item_id})` : `Item ID: ${req.request_data.itemId}`;
+    const requestTypeLabel = req.request_type === 'inbound' ? '入库' : '出库';
+    const statusBadge = getApprovalStatusBadge(req.status);
+
+    html += `<tr>
+      <td>${requestTypeLabel}</td>
+      <td>${req.requester_name}</td>
+      <td>${itemInfo}</td>
+      <td>${req.request_data.quantity}</td>
+      <td>${statusBadge}</td>
+      <td>${new Date(req.created_at).toLocaleString()}</td>
+      <td>
+        ${req.status === 'pending' ? `
+          <button class="btn btn-sm btn-success" onclick="reviewApproval(${req.request_id}, true)">通过</button>
+          <button class="btn btn-sm btn-danger" onclick="reviewApproval(${req.request_id}, false)">拒绝</button>
+          <button class="btn btn-sm btn-secondary" onclick="viewApprovalDetail(${req.request_id})">详情</button>
+        ` : `
+          <button class="btn btn-sm btn-secondary" onclick="viewApprovalDetail(${req.request_id})">详情</button>
+        `}
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function getApprovalStatusBadge(status) {
+  const badges = {
+    'pending': '<span class="badge badge-warning">待审批</span>',
+    'approved': '<span class="badge badge-success">已通过</span>',
+    'rejected': '<span class="badge badge-danger">已拒绝</span>'
+  };
+  return badges[status] || status;
+}
+
+async function reviewApproval(requestId, approved) {
+  const comment = prompt(approved ? '审批意见（可选）：' : '拒绝原因（可选）：');
+
+  try {
+    await apiRequest(`/approvals/${requestId}/review`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        approved,
+        comment: comment || ''
+      })
+    });
+
+    showMessage(approved ? '申请已通过' : '申请已拒绝', 'success');
+    loadApprovals('pending');
+  } catch (error) {
+    showMessage('操作失败: ' + error.message, 'error');
+  }
+}
+
+async function viewApprovalDetail(requestId) {
+  try {
+    const data = await apiRequest('/approvals');
+    const request = data.requests.find(r => r.request_id === requestId);
+
+    if (!request) {
+      showMessage('Request not found', 'error');
+      return;
+    }
+
+    const itemData = await apiRequest(`/items/${request.request_data.itemId}`);
+    const item = itemData.item;
+
+    const requestTypeLabel = request.request_type === 'inbound' ? '入库申请' : '出库申请';
+    const statusBadge = getApprovalStatusBadge(request.status);
+
+    let detailHTML = `
+      <div class="detail-table">
+        <table>
+          <tr><td><strong>申请类型:</strong></td><td>${requestTypeLabel}</td></tr>
+          <tr><td><strong>申请人:</strong></td><td>${request.requester_name}</td></tr>
+          <tr><td><strong>申请时间:</strong></td><td>${new Date(request.created_at).toLocaleString()}</td></tr>
+          <tr><td><strong>状态:</strong></td><td>${statusBadge}</td></tr>
+          ${request.reviewer_name ? `<tr><td><strong>审批人:</strong></td><td>${request.reviewer_name}</td></tr>` : ''}
+          ${request.reviewed_at ? `<tr><td><strong>审批时间:</strong></td><td>${new Date(request.reviewed_at).toLocaleString()}</td></tr>` : ''}
+          ${request.review_comment ? `<tr><td><strong>审批意见:</strong></td><td>${request.review_comment}</td></tr>` : ''}
+        </table>
+      </div>
+
+      <h4>申请详情</h4>
+      <div class="detail-table">
+        <table>
+          <tr><td><strong>物品名称:</strong></td><td>${item.item_name}</td></tr>
+          <tr><td><strong>唯一编号:</strong></td><td>${item.unique_code || 'N/A'}</td></tr>
+          <tr><td><strong>数量:</strong></td><td>${request.request_data.quantity}</td></tr>
+    `;
+
+    if (request.request_type === 'inbound') {
+      detailHTML += `
+        <tr><td><strong>入库类型:</strong></td><td>${request.request_data.inboundType === 'initial' ? '初次入库' : '归还入库'}</td></tr>
+        ${request.request_data.relatedOutboundId ? `<tr><td><strong>关联出库ID:</strong></td><td>${request.request_data.relatedOutboundId}</td></tr>` : ''}
+      `;
+    } else if (request.request_type === 'outbound') {
+      detailHTML += `
+        <tr><td><strong>出库类型:</strong></td><td>${request.request_data.outboundType === 'transfer' ? '永久转移' : '暂时借用'}</td></tr>
+        ${request.request_data.borrowerName ? `<tr><td><strong>借用人:</strong></td><td>${request.request_data.borrowerName}</td></tr>` : ''}
+        ${request.request_data.borrowerPhone ? `<tr><td><strong>借用人电话:</strong></td><td>${request.request_data.borrowerPhone}</td></tr>` : ''}
+        ${request.request_data.borrowerEmail ? `<tr><td><strong>借用人邮箱:</strong></td><td>${request.request_data.borrowerEmail}</td></tr>` : ''}
+        ${request.request_data.expectedReturnDate ? `<tr><td><strong>预计归还日期:</strong></td><td>${request.request_data.expectedReturnDate}</td></tr>` : ''}
+      `;
+    }
+
+    detailHTML += `
+          ${request.request_data.remarks ? `<tr><td><strong>备注:</strong></td><td>${request.request_data.remarks}</td></tr>` : ''}
+        </table>
+      </div>
+    `;
+
+    const modalHTML = `
+      <div id="approval-detail-modal" class="modal active">
+        <div class="modal-content">
+          <h2>审批详情</h2>
+          ${detailHTML}
+          <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal('approval-detail-modal')">关闭</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+  } catch (error) {
+    showMessage('Failed to load approval details: ' + error.message, 'error');
+  }
 }
 
 // ========== 用户管理 ==========
@@ -869,12 +1143,322 @@ async function submitQuickReturn() {
   }
 }
 
-function showInboundModal() {
-  showMessage('请使用快速归还功能或通过API操作', 'info');
+async function showInboundModal() {
+  const isAdmin = currentUser.role === 'admin';
+
+  // Load all items for selection
+  let itemsData;
+  try {
+    itemsData = await apiRequest('/items?limit=1000');
+  } catch (error) {
+    showMessage('Failed to load items: ' + error.message, 'error');
+    return;
+  }
+
+  const items = itemsData.items || [];
+  const itemOptions = items.map(item =>
+    `<option value="${item.item_id}" data-stackable="${item.is_stackable}">${item.item_name} (${item.unique_code || 'ID:' + item.item_id})</option>`
+  ).join('');
+
+  const modalHTML = `
+    <div id="inbound-modal" class="modal active">
+      <div class="modal-content">
+        <h2>新增入库</h2>
+        <form id="inbound-form">
+          <div class="form-group">
+            <label>选择物品 *</label>
+            <select id="inbound-item" required>
+              <option value="">请选择物品</option>
+              ${itemOptions}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>入库数量 *</label>
+            <input type="number" id="inbound-quantity" min="1" value="1" required>
+          </div>
+
+          <div class="form-group">
+            <label>入库类型 *</label>
+            <select id="inbound-type" required>
+              <option value="initial">初次入库</option>
+              <option value="return">归还入库</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="related-outbound-group" style="display: none;">
+            <label>关联出库记录ID</label>
+            <input type="number" id="related-outbound-id" min="1">
+            <small>如果是归还，请输入相关的出库记录ID</small>
+          </div>
+
+          <div class="form-group">
+            <label>备注</label>
+            <textarea id="inbound-remarks" rows="3"></textarea>
+          </div>
+
+          ${!isAdmin ? '<p class="text-warning">注意：您的入库请求需要管理员审批后才会生效</p>' : ''}
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">${isAdmin ? '确认入库' : '提交申请'}</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal('inbound-modal')">取消</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  // Event listeners
+  document.getElementById('inbound-type').addEventListener('change', (e) => {
+    const relatedGroup = document.getElementById('related-outbound-group');
+    relatedGroup.style.display = e.target.value === 'return' ? 'block' : 'none';
+  });
+
+  document.getElementById('inbound-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitInbound();
+  });
 }
 
-function showOutboundModal() {
-  showMessage('请通过API实现此功能', 'info');
+async function submitInbound() {
+  const isAdmin = currentUser.role === 'admin';
+  const itemId = document.getElementById('inbound-item').value;
+  const quantity = parseInt(document.getElementById('inbound-quantity').value);
+  const inboundType = document.getElementById('inbound-type').value;
+  const relatedOutboundId = document.getElementById('related-outbound-id').value;
+  const remarks = document.getElementById('inbound-remarks').value;
+
+  if (!itemId || !quantity || !inboundType) {
+    showMessage('Please fill in all required fields', 'error');
+    return;
+  }
+
+  try {
+    if (isAdmin) {
+      // Admin directly creates inbound record
+      await apiRequest('/inbound', {
+        method: 'POST',
+        body: JSON.stringify({
+          itemId: parseInt(itemId),
+          quantity,
+          inboundType,
+          relatedOutboundId: relatedOutboundId ? parseInt(relatedOutboundId) : null,
+          remarks
+        })
+      });
+      showMessage('入库成功！', 'success');
+    } else {
+      // Regular user creates approval request
+      await apiRequest('/approvals', {
+        method: 'POST',
+        body: JSON.stringify({
+          requestType: 'inbound',
+          requestData: {
+            itemId: parseInt(itemId),
+            quantity,
+            inboundType,
+            relatedOutboundId: relatedOutboundId ? parseInt(relatedOutboundId) : null,
+            remarks
+          }
+        })
+      });
+      showMessage('入库申请已提交，等待管理员审批', 'success');
+    }
+
+    closeModal('inbound-modal');
+    setTimeout(() => {
+      const modal = document.getElementById('inbound-modal');
+      if (modal) modal.remove();
+    }, 300);
+
+    loadInboundRecords();
+    loadDashboard();
+  } catch (error) {
+    showMessage('操作失败: ' + error.message, 'error');
+  }
+}
+
+async function showOutboundModal() {
+  const isAdmin = currentUser.role === 'admin';
+
+  // Load all items for selection
+  let itemsData;
+  try {
+    itemsData = await apiRequest('/items?limit=1000');
+  } catch (error) {
+    showMessage('Failed to load items: ' + error.message, 'error');
+    return;
+  }
+
+  const items = itemsData.items || [];
+  const itemOptions = items.map(item =>
+    `<option value="${item.item_id}" data-quantity="${item.current_quantity}">${item.item_name} (库存: ${item.current_quantity})</option>`
+  ).join('');
+
+  const modalHTML = `
+    <div id="outbound-modal" class="modal active">
+      <div class="modal-content">
+        <h2>新增出库</h2>
+        <form id="outbound-form">
+          <div class="form-group">
+            <label>选择物品 *</label>
+            <select id="outbound-item" required>
+              <option value="">请选择物品</option>
+              ${itemOptions}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>出库数量 *</label>
+            <input type="number" id="outbound-quantity" min="1" value="1" required>
+            <small id="available-quantity"></small>
+          </div>
+
+          <div class="form-group">
+            <label>出库类型 *</label>
+            <select id="outbound-type" required>
+              <option value="transfer">永久转移</option>
+              <option value="borrow">暂时借用</option>
+            </select>
+          </div>
+
+          <div id="borrow-fields" style="display: none;">
+            <div class="form-group">
+              <label>借用人姓名 *</label>
+              <input type="text" id="borrower-name">
+            </div>
+
+            <div class="form-group">
+              <label>借用人电话 *</label>
+              <input type="tel" id="borrower-phone">
+            </div>
+
+            <div class="form-group">
+              <label>借用人邮箱 *</label>
+              <input type="email" id="borrower-email">
+            </div>
+
+            <div class="form-group">
+              <label>预计归还日期 *</label>
+              <input type="date" id="expected-return-date">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>备注</label>
+            <textarea id="outbound-remarks" rows="3"></textarea>
+          </div>
+
+          ${!isAdmin ? '<p class="text-warning">注意：您的出库请求需要管理员审批后才会生效</p>' : ''}
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">${isAdmin ? '确认出库' : '提交申请'}</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal('outbound-modal')">取消</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  // Event listeners
+  document.getElementById('outbound-item').addEventListener('change', (e) => {
+    const selectedOption = e.target.options[e.target.selectedIndex];
+    const quantity = selectedOption.dataset.quantity || 0;
+    const quantityDisplay = document.getElementById('available-quantity');
+    quantityDisplay.textContent = `可用库存: ${quantity}`;
+  });
+
+  document.getElementById('outbound-type').addEventListener('change', (e) => {
+    const borrowFields = document.getElementById('borrow-fields');
+    const isBorrow = e.target.value === 'borrow';
+    borrowFields.style.display = isBorrow ? 'block' : 'none';
+
+    // Set required attribute
+    ['borrower-name', 'borrower-phone', 'borrower-email', 'expected-return-date'].forEach(id => {
+      const field = document.getElementById(id);
+      if (field) {
+        field.required = isBorrow;
+      }
+    });
+  });
+
+  document.getElementById('outbound-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitOutbound();
+  });
+}
+
+async function submitOutbound() {
+  const isAdmin = currentUser.role === 'admin';
+  const itemId = document.getElementById('outbound-item').value;
+  const quantity = parseInt(document.getElementById('outbound-quantity').value);
+  const outboundType = document.getElementById('outbound-type').value;
+  const remarks = document.getElementById('outbound-remarks').value;
+
+  if (!itemId || !quantity || !outboundType) {
+    showMessage('Please fill in all required fields', 'error');
+    return;
+  }
+
+  const requestData = {
+    itemId: parseInt(itemId),
+    quantity,
+    outboundType,
+    remarks
+  };
+
+  if (outboundType === 'borrow') {
+    const borrowerName = document.getElementById('borrower-name').value;
+    const borrowerPhone = document.getElementById('borrower-phone').value;
+    const borrowerEmail = document.getElementById('borrower-email').value;
+    const expectedReturnDate = document.getElementById('expected-return-date').value;
+
+    if (!borrowerName || !borrowerPhone || !borrowerEmail || !expectedReturnDate) {
+      showMessage('Please fill in all borrower information', 'error');
+      return;
+    }
+
+    requestData.borrowerName = borrowerName;
+    requestData.borrowerPhone = borrowerPhone;
+    requestData.borrowerEmail = borrowerEmail;
+    requestData.expectedReturnDate = expectedReturnDate;
+  }
+
+  try {
+    if (isAdmin) {
+      // Admin directly creates outbound record
+      await apiRequest('/outbound', {
+        method: 'POST',
+        body: JSON.stringify(requestData)
+      });
+      showMessage('出库成功！', 'success');
+    } else {
+      // Regular user creates approval request
+      await apiRequest('/approvals', {
+        method: 'POST',
+        body: JSON.stringify({
+          requestType: 'outbound',
+          requestData
+        })
+      });
+      showMessage('出库申请已提交，等待管理员审批', 'success');
+    }
+
+    closeModal('outbound-modal');
+    setTimeout(() => {
+      const modal = document.getElementById('outbound-modal');
+      if (modal) modal.remove();
+    }, 300);
+
+    loadOutboundRecords();
+    loadDashboard();
+  } catch (error) {
+    showMessage('操作失败: ' + error.message, 'error');
+  }
 }
 
 function showAddCategoryModal() {

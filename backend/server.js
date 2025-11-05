@@ -26,6 +26,7 @@ const inboundRoutes = require('./routes/inbound');
 const outboundRoutes = require('./routes/outbound');
 const logRoutes = require('./routes/logs');
 const statsRoutes = require('./routes/stats');
+const approvalRoutes = require('./routes/approvals');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -35,6 +36,7 @@ app.use('/api/inbound', inboundRoutes);
 app.use('/api/outbound', outboundRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/approvals', approvalRoutes);
 
 // 健康检查
 app.get('/health', (req, res) => {

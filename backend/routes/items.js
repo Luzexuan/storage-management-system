@@ -252,9 +252,9 @@ router.delete('/:itemId', verifyToken, verifyActiveUser, verifyAdmin, async (req
   const { itemId } = req.params;
 
   try {
-    // Check if item has inventory
+    // Get item details for logging
     const [items] = await db.execute(
-      'SELECT current_quantity FROM items WHERE item_id = ?',
+      'SELECT item_id, item_name, unique_code, current_quantity, status FROM items WHERE item_id = ?',
       [itemId]
     );
 
@@ -262,23 +262,32 @@ router.delete('/:itemId', verifyToken, verifyActiveUser, verifyAdmin, async (req
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    if (items[0].current_quantity > 0) {
-      return res.status(400).json({ error: 'Item still has inventory, cannot delete' });
-    }
+    const item = items[0];
 
+    // Admin can delete items with inventory - log the deletion with current quantity
     await db.execute('DELETE FROM items WHERE item_id = ?', [itemId]);
 
-    // Log operation
+    // Log operation with detailed information
     await logOperation({
       operationType: 'edit_item',
       operatorId: req.user.userId,
       targetType: 'item',
       targetId: parseInt(itemId),
-      operationDetail: { action: 'delete' },
+      operationDetail: {
+        action: 'delete',
+        itemName: item.item_name,
+        uniqueCode: item.unique_code || null,
+        currentQuantity: item.current_quantity,
+        status: item.status,
+        note: item.current_quantity > 0 ? `Item deleted with inventory: ${item.current_quantity}` : 'Item deleted with zero inventory'
+      },
       ipAddress: getClientIP(req)
     });
 
-    res.json({ message: 'Item deleted successfully' });
+    res.json({
+      message: 'Item deleted successfully',
+      warning: item.current_quantity > 0 ? `Item had inventory of ${item.current_quantity} at deletion` : null
+    });
   } catch (error) {
     console.error('Failed to delete item:', error);
     res.status(500).json({ error: 'Failed to delete item' });

@@ -307,15 +307,19 @@ body {
 
 /* 管理员专用 */
 .admin-only {
-  display: none;
+  display: none !important;
 }
 
 body.is-admin .admin-only {
-  display: block;
+  display: block !important;
 }
 
-body.is-admin li .admin-only {
-  display: list-item;
+body.is-admin li.admin-only {
+  display: list-item !important;
+}
+
+body.is-admin .toolbar.admin-only {
+  display: flex !important;
 }
 
 /* 模态框 */
