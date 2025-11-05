@@ -174,8 +174,10 @@ async function loadDashboard() {
     document.getElementById('stat-overdue').textContent = overview.overdueBorrows;
     document.getElementById('stat-monthly-in').textContent = overview.monthlyInbound;
 
-    // 加载最近日志
-    const logsData = await apiRequest('/logs?limit=10');
+    // Load recent logs - for regular users, only show their own operations
+    const isAdmin = currentUser.role === 'admin';
+    const logsEndpoint = isAdmin ? '/logs?limit=10' : `/logs?operatorId=${currentUser.userId}&limit=10`;
+    const logsData = await apiRequest(logsEndpoint);
     displayRecentLogs(logsData.logs);
   } catch (error) {
     showMessage('加载仪表盘失败: ' + error.message, 'error');
@@ -1060,7 +1062,7 @@ async function submitAddItem() {
   }
 }
 
-// 快速归还模态框
+// 归还模态框
 async function showQuickReturnModal() {
   try {
     const data = await apiRequest('/outbound/my-borrowings');
@@ -1075,7 +1077,7 @@ async function showQuickReturnModal() {
       <div id="quick-return-modal" class="modal active">
         <div class="modal-content">
           <div class="modal-header">
-            <h2>快速归还 - 我的借用</h2>
+            <h2>归还 - 我的借用</h2>
             <button class="modal-close" onclick="closeModal('quick-return-modal')">&times;</button>
           </div>
           <div class="modal-body">

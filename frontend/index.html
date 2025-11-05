@@ -79,9 +79,9 @@
           <li><a href="#" onclick="showSection('items')">物品管理</a></li>
           <li><a href="#" onclick="showSection('inbound')">入库管理</a></li>
           <li><a href="#" onclick="showSection('outbound')">出库管理</a></li>
-          <li><a href="#" onclick="showSection('categories')">分类管理</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('categories')">分类管理</a></li>
           <li class="admin-only"><a href="#" onclick="showSection('approvals')">审批管理</a></li>
-          <li><a href="#" onclick="showSection('logs')">操作日志</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('logs')">操作日志</a></li>
           <li class="admin-only"><a href="#" onclick="showSection('users')">用户管理</a></li>
           <li><a href="#" onclick="showSection('profile')">个人信息</a></li>
         </ul>
@@ -163,7 +163,7 @@
           <h2>入库管理</h2>
           <div class="toolbar">
             <button class="btn btn-primary" onclick="showInboundModal()">新增入库</button>
-            <button class="btn btn-success" onclick="showQuickReturnModal()">快速归还</button>
+            <button class="btn btn-success" onclick="showQuickReturnModal()">归还</button>
           </div>
           <table class="data-table">
             <thead>
@@ -187,7 +187,6 @@
           <div class="toolbar">
             <button class="btn btn-primary" onclick="showOutboundModal()">新增出库</button>
             <button class="btn btn-secondary" onclick="loadUnreturnedItems()">查看未归还</button>
-            <button class="btn btn-success" onclick="showQuickReturnModal()">快速归还</button>
           </div>
           <table class="data-table">
             <thead>
