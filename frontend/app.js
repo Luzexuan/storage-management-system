@@ -1757,24 +1757,12 @@ async function showOutboundModal() {
 
               <div id="borrow-fields" style="display: none;">
                 <div class="form-group">
-                  <label>借用人姓名 *</label>
-                  <input type="text" id="borrower-name">
-                </div>
-
-                <div class="form-group">
-                  <label>借用人电话 *</label>
-                  <input type="tel" id="borrower-phone">
-                </div>
-
-                <div class="form-group">
-                  <label>借用人邮箱 *</label>
-                  <input type="email" id="borrower-email">
-                </div>
-
-                <div class="form-group">
                   <label>预计归还日期 *</label>
                   <input type="date" id="expected-return-date">
                 </div>
+                <p class="text-info" style="margin-top: 10px; font-size: 14px;">
+                  借用人信息将自动使用您的账号信息（姓名、邮箱、手机号）
+                </p>
               </div>
 
               <div class="form-group">
@@ -1944,13 +1932,11 @@ function setupOutboundCascadingCategories() {
     const isBorrow = e.target.value === 'borrow';
     borrowFields.style.display = isBorrow ? 'block' : 'none';
 
-    // Set required attribute
-    ['borrower-name', 'borrower-phone', 'borrower-email', 'expected-return-date'].forEach(id => {
-      const field = document.getElementById(id);
-      if (field) {
-        field.required = isBorrow;
-      }
-    });
+    // Set required attribute for expected return date only
+    const expectedReturnField = document.getElementById('expected-return-date');
+    if (expectedReturnField) {
+      expectedReturnField.required = isBorrow;
+    }
   });
 }
 
@@ -2035,19 +2021,17 @@ async function submitOutbound() {
   };
 
   if (outboundType === 'borrow') {
-    const borrowerName = document.getElementById('borrower-name').value;
-    const borrowerPhone = document.getElementById('borrower-phone').value;
-    const borrowerEmail = document.getElementById('borrower-email').value;
     const expectedReturnDate = document.getElementById('expected-return-date').value;
 
-    if (!borrowerName || !borrowerPhone || !borrowerEmail || !expectedReturnDate) {
-      showMessage('Please fill in all borrower information', 'error');
+    if (!expectedReturnDate) {
+      showMessage('请填写预计归还日期', 'error');
       return;
     }
 
-    requestData.borrowerName = borrowerName;
-    requestData.borrowerPhone = borrowerPhone;
-    requestData.borrowerEmail = borrowerEmail;
+    // Use current user's information as borrower
+    requestData.borrowerName = currentUser.username;
+    requestData.borrowerPhone = currentUser.phone || '';
+    requestData.borrowerEmail = currentUser.email;
     requestData.expectedReturnDate = expectedReturnDate;
   }
 
