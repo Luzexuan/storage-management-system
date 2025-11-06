@@ -992,7 +992,7 @@ async function loadTopLevelCategories() {
 async function loadChildCategories(parentId) {
   try {
     const data = await apiRequest(`/categories/${parentId}/children`);
-    return data.categories;
+    return data.children || [];
   } catch (error) {
     showMessage('加载子分类失败: ' + error.message, 'error');
     return [];

@@ -23,6 +23,7 @@ CREATE TABLE categories (
     parent_id INT DEFAULT NULL,
     level INT NOT NULL,
     sort_order INT DEFAULT 0,
+    is_stackable BOOLEAN DEFAULT FALSE COMMENT '该分类下的物品是否可堆叠',
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
