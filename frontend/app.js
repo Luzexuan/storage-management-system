@@ -2270,7 +2270,7 @@ async function loadProfile() {
     document.getElementById('profile-username').textContent = user.username;
     document.getElementById('profile-role').textContent = user.role === 'admin' ? '管理员' : '普通用户';
     document.getElementById('profile-status').textContent = user.status === 'active' ? '已激活' : user.status;
-    document.getElementById('profile-created').textContent = new Date(user.created_at).toLocaleString('zh-CN');
+    document.getElementById('profile-created').textContent = new Date(user.createdAt).toLocaleString('zh-CN');
     document.getElementById('profile-email').value = user.email || '';
     document.getElementById('profile-phone').value = user.phone || '';
   } catch (error) {
