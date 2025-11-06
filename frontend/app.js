@@ -231,8 +231,8 @@ async function loadMyBorrowedItems() {
   const tbody = document.getElementById('my-borrowed-tbody');
 
   try {
-    const data = await apiRequest(`/outbound?borrower=${currentUser.username}&isReturned=false&limit=1000`);
-    const borrowedItems = data.records || [];
+    const data = await apiRequest('/outbound/my-borrowings');
+    const borrowedItems = data.borrowings || [];
 
     if (borrowedItems.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" class="text-muted">您当前没有借用的物品</td></tr>';
@@ -260,7 +260,7 @@ async function loadMyBorrowedItems() {
           <td>${expectedReturn}</td>
           <td class="${statusClass}">${statusText}</td>
           <td>
-            <button class="btn btn-sm btn-success" onclick="returnBorrowedItem(${record.outbound_id})">归还</button>
+            <button class="btn btn-sm btn-success" onclick="returnBorrowedItem(${record.outbound_id}, ${record.item_id}, ${record.quantity})">归还</button>
             <button class="btn btn-sm btn-secondary" onclick="convertToTransferFromItems(${record.outbound_id}, ${record.item_id})">转为永久转移</button>
           </td>
         </tr>
@@ -273,17 +273,12 @@ async function loadMyBorrowedItems() {
 }
 
 // Return a borrowed item from the items management section
-async function returnBorrowedItem(outboundId) {
+async function returnBorrowedItem(outboundId, itemId, quantity) {
   if (!confirm('确定要归还此物品吗？')) {
     return;
   }
 
   try {
-    // Use the quick return logic - submit inbound with return type
-    // First get the outbound record details
-    const outboundData = await apiRequest(`/outbound/${outboundId}`);
-    const record = outboundData.record;
-
     const isAdmin = currentUser.role === 'admin';
 
     if (isAdmin) {
@@ -291,8 +286,8 @@ async function returnBorrowedItem(outboundId) {
       await apiRequest('/inbound', {
         method: 'POST',
         body: JSON.stringify({
-          itemId: record.item_id,
-          quantity: record.quantity,
+          itemId: itemId,
+          quantity: quantity,
           inboundType: 'return',
           relatedOutboundId: outboundId,
           remarks: '归还'
@@ -307,8 +302,8 @@ async function returnBorrowedItem(outboundId) {
           requestType: 'inbound',
           requestData: {
             mode: 'update_stackable',
-            itemId: record.item_id,
-            quantity: record.quantity,
+            itemId: itemId,
+            quantity: quantity,
             inboundType: 'return',
             relatedOutboundId: outboundId,
             remarks: '归还'
@@ -1675,8 +1670,8 @@ async function showOutboundModal() {
   // Load user's borrowed items
   let borrowedItems = [];
   try {
-    const outboundData = await apiRequest(`/outbound?borrower=${currentUser.username}&isReturned=false`);
-    borrowedItems = outboundData.records || [];
+    const borrowingsData = await apiRequest('/outbound/my-borrowings');
+    borrowedItems = borrowingsData.borrowings || [];
   } catch (error) {
     console.warn('Failed to load borrowed items:', error);
   }
