@@ -35,6 +35,27 @@ router.get('/top-level', verifyToken, verifyActiveUser, async (req, res) => {
   }
 });
 
+// 获取单个分类详情
+router.get('/:categoryId/details', verifyToken, verifyActiveUser, async (req, res) => {
+  const { categoryId } = req.params;
+
+  try {
+    const [categories] = await db.execute(
+      'SELECT * FROM categories WHERE category_id = ?',
+      [categoryId]
+    );
+
+    if (categories.length === 0) {
+      return res.status(404).json({ error: '分类不存在' });
+    }
+
+    res.json({ category: categories[0] });
+  } catch (error) {
+    console.error('获取分类详情失败:', error);
+    res.status(500).json({ error: '获取分类详情失败' });
+  }
+});
+
 // 获取子分类
 router.get('/:categoryId/children', verifyToken, verifyActiveUser, async (req, res) => {
   const { categoryId } = req.params;
@@ -45,7 +66,7 @@ router.get('/:categoryId/children', verifyToken, verifyActiveUser, async (req, r
       [categoryId]
     );
 
-    res.json({ categories });
+    res.json({ children: categories });
   } catch (error) {
     console.error('获取子分类失败:', error);
     res.status(500).json({ error: '获取子分类失败' });

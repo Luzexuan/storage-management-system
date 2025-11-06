@@ -1489,7 +1489,7 @@ function setupInboundCascadingCategories() {
 
     try {
       // Get category details to check if stackable
-      const categoryData = await apiRequest(`/categories/${categoryId}`);
+      const categoryData = await apiRequest(`/categories/${categoryId}/details`);
       isStackable = categoryData.category.is_stackable === 1;
 
       if (isStackable) {
