@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -10,6 +11,24 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// 静态文件服务 - 禁用缓存以确保始终获取最新版本
+app.use(express.static(path.join(__dirname, '../frontend'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, filePath) => {
+    // 对于 HTML 文件，禁用缓存
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    // 对于 JS 和 CSS 文件，使用短期缓存并要求验证
+    else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  }
+}));
 
 // 请求日志
 app.use((req, res, next) => {

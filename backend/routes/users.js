@@ -113,7 +113,19 @@ router.get('/me', verifyToken, verifyActiveUser, async (req, res) => {
       return res.status(404).json({ error: '用户不存在' });
     }
 
-    res.json({ user: users[0] });
+    const user = users[0];
+    // Convert to camelCase for consistency with login response
+    res.json({
+      user: {
+        userId: user.user_id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        createdAt: user.created_at
+      }
+    });
   } catch (error) {
     console.error('获取用户信息失败:', error);
     res.status(500).json({ error: '获取用户信息失败' });
