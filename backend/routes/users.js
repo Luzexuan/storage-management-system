@@ -75,13 +75,7 @@ router.put('/:userId/approve', verifyToken, verifyActiveUser, verifyAdmin, async
 
       const userInfo = users[0];
 
-      // 删除用户记录
-      await db.execute(
-        'DELETE FROM users WHERE user_id = ?',
-        [userId]
-      );
-
-      // 记录日志
+      // 先记录拒绝日志（在删除用户之前）
       await logOperation({
         operationType: 'user_reject',
         operatorId: req.user.userId,
@@ -94,6 +88,18 @@ router.put('/:userId/approve', verifyToken, verifyActiveUser, verifyAdmin, async
         },
         ipAddress: getClientIP(req)
       });
+
+      // 删除该用户的所有操作日志（解除外键约束）
+      await db.execute(
+        'DELETE FROM operation_logs WHERE operator_id = ?',
+        [userId]
+      );
+
+      // 删除用户记录
+      await db.execute(
+        'DELETE FROM users WHERE user_id = ?',
+        [userId]
+      );
 
       res.json({
         message: '用户申请已拒绝，记录已删除',
