@@ -23,72 +23,16 @@ router.post('/register',
     const { username, password, email, phone } = req.body;
 
     try {
-      // 检查用户名或邮箱是否已存在
+      // 检查用户名、邮箱或手机号是否已存在
       const [existing] = await db.execute(
-        'SELECT user_id, username, email, phone, status FROM users WHERE username = ? OR email = ? OR (phone IS NOT NULL AND phone = ?)',
+        'SELECT user_id FROM users WHERE username = ? OR email = ? OR (phone IS NOT NULL AND phone = ?)',
         [username, email, phone || null]
       );
 
-      // 检查是否存在冲突
       if (existing.length > 0) {
-        const existingUser = existing[0];
-
-        // 如果是被拒绝的账户（inactive状态），允许用户重新提交申请
-        if (existingUser.status === 'inactive') {
-          // 检查是否所有信息都匹配（同一个用户重新申请）
-          const isSameUser = existingUser.username === username &&
-                            existingUser.email === email &&
-                            existingUser.phone === phone;
-
-          if (isSameUser) {
-            // 同一个用户重新申请，更新密码并重置状态为pending
-            const passwordHash = await bcrypt.hash(password, 10);
-
-            await db.execute(
-              `UPDATE users SET password_hash = ?, status = 'pending', updated_at = NOW() WHERE user_id = ?`,
-              [passwordHash, existingUser.user_id]
-            );
-
-            // 记录日志
-            await logOperation({
-              operationType: 'user_reapply',
-              operatorId: existingUser.user_id,
-              targetType: 'user',
-              targetId: existingUser.user_id,
-              operationDetail: { username, email, action: 'reapply_after_rejection' },
-              ipAddress: getClientIP(req)
-            });
-
-            return res.status(200).json({
-              message: '申请已重新提交，请等待管理员审核',
-              userId: existingUser.user_id
-            });
-          } else {
-            // 不同的用户，但某些信息与被拒绝的账户冲突
-            // 提供更详细的错误信息
-            const conflicts = [];
-            if (existingUser.username === username) conflicts.push('用户名');
-            if (existingUser.email === email) conflicts.push('邮箱');
-            if (existingUser.phone === phone && phone) conflicts.push('手机号');
-
-            return res.status(400).json({
-              error: `${conflicts.join('、')}已被其他账户使用（该账户申请已被拒绝），请使用不同的信息注册`
-            });
-          }
-        } else {
-          // active 或 pending 状态的用户，不允许重复注册
-          const conflicts = [];
-          if (existingUser.username === username) conflicts.push('用户名');
-          if (existingUser.email === email) conflicts.push('邮箱');
-          if (existingUser.phone === phone && phone) conflicts.push('手机号');
-
-          return res.status(400).json({
-            error: `${conflicts.join('、')}已被使用`
-          });
-        }
+        return res.status(400).json({ error: '用户名、邮箱或手机号已被使用' });
       }
 
-      // 没有冲突，创建新用户
       // 加密密码
       const passwordHash = await bcrypt.hash(password, 10);
 

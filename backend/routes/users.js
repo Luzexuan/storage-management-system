@@ -40,28 +40,67 @@ router.put('/:userId/approve', verifyToken, verifyActiveUser, verifyAdmin, async
   const { approve } = req.body; // true: 通过, false: 拒绝
 
   try {
-    const newStatus = approve ? 'active' : 'inactive';
+    if (approve) {
+      // 批准：将状态改为 active
+      await db.execute(
+        'UPDATE users SET status = ? WHERE user_id = ?',
+        ['active', userId]
+      );
 
-    await db.execute(
-      'UPDATE users SET status = ? WHERE user_id = ?',
-      [newStatus, userId]
-    );
+      // 记录日志
+      await logOperation({
+        operationType: 'user_approve',
+        operatorId: req.user.userId,
+        targetType: 'user',
+        targetId: parseInt(userId),
+        operationDetail: { action: 'approved' },
+        ipAddress: getClientIP(req)
+      });
 
-    // 记录日志
-    await logOperation({
-      operationType: 'user_approve',
-      operatorId: req.user.userId,
-      targetType: 'user',
-      targetId: parseInt(userId),
-      operationDetail: { action: approve ? 'approved' : 'rejected' },
-      ipAddress: getClientIP(req)
-    });
+      res.json({
+        message: '用户已批准',
+        userId,
+        status: 'active'
+      });
+    } else {
+      // 拒绝：先获取用户信息用于日志，然后删除用户记录
+      const [users] = await db.execute(
+        'SELECT username, email FROM users WHERE user_id = ?',
+        [userId]
+      );
 
-    res.json({
-      message: approve ? '用户已批准' : '用户已拒绝',
-      userId,
-      status: newStatus
-    });
+      if (users.length === 0) {
+        return res.status(404).json({ error: '用户不存在' });
+      }
+
+      const userInfo = users[0];
+
+      // 删除用户记录
+      await db.execute(
+        'DELETE FROM users WHERE user_id = ?',
+        [userId]
+      );
+
+      // 记录日志
+      await logOperation({
+        operationType: 'user_reject',
+        operatorId: req.user.userId,
+        targetType: 'user',
+        targetId: parseInt(userId),
+        operationDetail: {
+          action: 'rejected_and_deleted',
+          username: userInfo.username,
+          email: userInfo.email
+        },
+        ipAddress: getClientIP(req)
+      });
+
+      res.json({
+        message: '用户申请已拒绝，记录已删除',
+        userId,
+        deleted: true
+      });
+    }
   } catch (error) {
     console.error('审核用户失败:', error);
     res.status(500).json({ error: '审核用户失败' });
