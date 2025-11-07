@@ -27,6 +27,12 @@ async function apiRequest(endpoint, options = {}) {
     const data = await response.json();
 
     if (!response.ok) {
+      // 处理表单验证错误（express-validator返回的errors数组）
+      if (data.errors && Array.isArray(data.errors)) {
+        const errorMessages = data.errors.map(err => err.msg).join('; ');
+        throw new Error(errorMessages);
+      }
+      // 处理普通错误
       throw new Error(data.error || '请求失败');
     }
 
