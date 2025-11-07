@@ -9,7 +9,7 @@ const { logOperation, getClientIP } = require('../utils/logger');
 // 用户注册
 router.post('/register',
   [
-    body('username').trim().isLength({ min: 3, max: 50 }).withMessage('用户名长度为3-50个字符'),
+    body('username').trim().isLength({ min: 1, max: 50 }).withMessage('用户名长度为1-50个字符'),
     body('password').isLength({ min: 6 }).withMessage('密码至少6个字符'),
     body('email').isEmail().withMessage('请输入有效的邮箱地址'),
     body('phone').optional().isMobilePhone('zh-CN').withMessage('请输入有效的手机号')
