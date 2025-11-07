@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>仓库管理系统</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- 登录页面 -->
+  <div id="login-page" class="page active">
+    <div class="login-container">
+      <h1>仓库管理系统</h1>
+      <div class="login-box">
+        <h2>用户登录</h2>
+        <form id="login-form">
+          <div class="form-group">
+            <label>用户名</label>
+            <input type="text" id="login-username" required>
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="login-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary">登录</button>
+        </form>
+        <p class="register-link">
+          还没有账号？<a href="#" onclick="showRegister()">立即注册</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 注册页面 -->
+  <div id="register-page" class="page">
+    <div class="login-container">
+      <h1>用户注册</h1>
+      <div class="login-box">
+        <form id="register-form">
+          <div class="form-group">
+            <label>用户名</label>
+            <input type="text" id="reg-username" required>
+          </div>
+          <div class="form-group">
+            <label>邮箱</label>
+            <input type="email" id="reg-email" required>
+          </div>
+          <div class="form-group">
+            <label>手机号</label>
+            <input type="tel" id="reg-phone">
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="reg-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary">注册</button>
+          <button type="button" class="btn btn-secondary" onclick="showLogin()">返回登录</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主页面 -->
+  <div id="main-page" class="page">
+    <!-- 顶部导航 -->
+    <nav class="navbar">
+      <div class="nav-brand">仓库管理系统</div>
+      <div class="nav-user">
+        <span id="user-info"></span>
+        <button class="btn btn-sm" onclick="logout()">退出登录</button>
+      </div>
+    </nav>
+
+    <div class="container">
+      <!-- 侧边栏 -->
+      <aside class="sidebar">
+        <ul class="menu">
+          <li><a href="#" onclick="showSection('dashboard')" class="active">仪表盘</a></li>
+          <li><a href="#" onclick="showSection('items')">物品管理</a></li>
+          <li><a href="#" onclick="showSection('inbound')">入库管理</a></li>
+          <li><a href="#" onclick="showSection('outbound')">出库管理</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('categories')">分类管理</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('approvals')">审批管理</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('logs')">操作日志</a></li>
+          <li class="admin-only"><a href="#" onclick="showSection('users')">用户管理</a></li>
+          <li><a href="#" onclick="showSection('profile')">个人信息</a></li>
+        </ul>
+      </aside>
+      <!-- 主内容区 -->
+      <main class="content">
+        <!-- 仪表盘 -->
+        <section id="dashboard-section" class="section active">
+          <h2>仪表盘</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>物品总数</h3>
+              <p class="stat-number" id="stat-total-items">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>在库物品</h3>
+              <p class="stat-number" id="stat-in-stock">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>缺货物品</h3>
+              <p class="stat-number" id="stat-out-stock">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>未归还借用</h3>
+              <p class="stat-number" id="stat-unreturned">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>逾期未归还</h3>
+              <p class="stat-number text-danger" id="stat-overdue">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>本月入库</h3>
+              <p class="stat-number" id="stat-monthly-in">0</p>
+            </div>
+          </div>
+
+          <div class="section-content">
+            <h3>最近操作</h3>
+            <div id="recent-logs"></div>
+          </div>
+        </section>
+
+        <!-- 物品管理 -->
+        <section id="items-section" class="section">
+          <h2>物品管理</h2>
+          <div class="toolbar">
+            <button class="btn btn-primary admin-only" onclick="showAddItemModal()">新增物品</button>
+            <button class="btn btn-success" id="show-all-items-btn" onclick="toggleShowAllItems()">显示所有物品</button>
+            <select id="sort-by" class="btn btn-secondary" onchange="sortItems()">
+              <option value="">排序方式</option>
+              <option value="name-asc">名称升序</option>
+              <option value="name-desc">名称降序</option>
+              <option value="quantity-asc">库存升序</option>
+              <option value="quantity-desc">库存降序</option>
+              <option value="created-asc">创建时间升序</option>
+              <option value="created-desc">创建时间降序</option>
+            </select>
+            <input type="text" id="item-search" placeholder="搜索物品..." onkeyup="searchItems()">
+          </div>
+          <table id="items-table" class="data-table">
+            <thead>
+              <tr>
+                <th>唯一编号</th>
+                <th>物品名称</th>
+                <th>分类</th>
+                <th>型号</th>
+                <th>当前库存</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody">
+            </tbody>
+          </table>
+
+          <!-- My Borrowed Items -->
+          <div id="my-borrowed-items" style="margin-top: 2rem;">
+            <h3>我的借用</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>物品名称</th>
+                  <th>唯一编号</th>
+                  <th>数量</th>
+                  <th>借出时间</th>
+                  <th>预计归还</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="my-borrowed-tbody">
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 入库管理 -->
+        <section id="inbound-section" class="section">
+          <h2>入库管理</h2>
+          <div class="toolbar">
+            <button class="btn btn-primary" onclick="showInboundModal()">新增入库</button>
+            <button class="btn btn-success" onclick="showQuickReturnModal()">归还</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>入库时间</th>
+                <th>物品名称</th>
+                <th>数量</th>
+                <th>类型</th>
+                <th>操作人</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody id="inbound-tbody">
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 出库管理 -->
+        <section id="outbound-section" class="section">
+          <h2>出库管理</h2>
+          <div class="toolbar">
+            <button class="btn btn-primary" onclick="showOutboundModal()">新增出库</button>
+            <button class="btn btn-secondary" onclick="loadUnreturnedItems()">查看未归还</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>出库时间</th>
+                <th>物品名称</th>
+                <th>数量</th>
+                <th>类型</th>
+                <th>借用人</th>
+                <th>预计归还</th>
+                <th>是否归还</th>
+                <th>操作人</th>
+              </tr>
+            </thead>
+            <tbody id="outbound-tbody">
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 分类管理 -->
+        <section id="categories-section" class="section">
+          <h2>分类管理</h2>
+          <div class="toolbar admin-only">
+            <button class="btn btn-primary" onclick="showAddCategoryModal()">新增分类</button>
+          </div>
+          <div id="categories-tree"></div>
+        </section>
+
+        <!-- 操作日志 -->
+        <section id="logs-section" class="section">
+          <h2>操作日志</h2>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>操作类型</th>
+                <th>操作人</th>
+                <th>目标类型</th>
+                <th>详情</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody">
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 审批管理（仅管理员）-->
+        <section id="approvals-section" class="section admin-only">
+          <h2>审批管理</h2>
+          <div class="toolbar">
+            <button class="btn btn-secondary" onclick="loadApprovals('pending')">待审批</button>
+            <button class="btn btn-secondary" onclick="loadApprovals('approved')">已通过</button>
+            <button class="btn btn-secondary" onclick="loadApprovals('rejected')">已拒绝</button>
+            <button class="btn btn-primary" onclick="loadApprovals()">全部</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>申请类型</th>
+                <th>申请人</th>
+                <th>物品信息</th>
+                <th>数量</th>
+                <th>状态</th>
+                <th>申请时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="approvals-tbody">
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 用户管理（仅管理员）-->
+        <section id="users-section" class="section admin-only">
+          <h2>用户管理</h2>
+          <h3>待审核用户</h3>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>邮箱</th>
+                <th>手机</th>
+                <th>注册时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="pending-users-tbody">
+            </tbody>
+          </table>
+
+          <h3>所有用户</h3>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>邮箱</th>
+                <th>角色</th>
+                <th>状态</th>
+                <th>注册时间</th>
+              </tr>
+            </thead>
+            <tbody id="all-users-tbody">
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 个人信息 -->
+        <section id="profile-section" class="section">
+          <h2>个人信息</h2>
+
+          <div class="profile-container">
+            <div class="profile-card">
+              <h3>基本信息</h3>
+              <div class="profile-info">
+                <div class="info-row">
+                  <label>用户名：</label>
+                  <span id="profile-username">-</span>
+                </div>
+                <div class="info-row">
+                  <label>角色：</label>
+                  <span id="profile-role">-</span>
+                </div>
+                <div class="info-row">
+                  <label>状态：</label>
+                  <span id="profile-status">-</span>
+                </div>
+                <div class="info-row">
+                  <label>注册时间：</label>
+                  <span id="profile-created">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="profile-card">
+              <h3>联系方式</h3>
+              <form id="update-info-form">
+                <div class="form-group">
+                  <label>邮箱</label>
+                  <input type="email" id="profile-email" required>
+                </div>
+                <div class="form-group">
+                  <label>手机号</label>
+                  <input type="tel" id="profile-phone">
+                </div>
+                <button type="submit" class="btn btn-primary">保存修改</button>
+              </form>
+            </div>
+
+            <div class="profile-card">
+              <h3>修改密码</h3>
+              <form id="change-password-form">
+                <div class="form-group">
+                  <label>当前密码</label>
+                  <input type="password" id="current-password" required>
+                </div>
+                <div class="form-group">
+                  <label>新密码</label>
+                  <input type="password" id="new-password" required minlength="6">
+                </div>
+                <div class="form-group">
+                  <label>确认新密码</label>
+                  <input type="password" id="confirm-password" required minlength="6">
+                </div>
+                <button type="submit" class="btn btn-primary">修改密码</button>
+              </form>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- 模态框容器 -->
+  <div id="modal-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
