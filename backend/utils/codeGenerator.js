@@ -1,10 +1,13 @@
 const db = require('../config/database');
 
 /**
- * 生成物品唯一编号（已弃用 - 现在由用户手动输入）
- * 格式: 一级分类-次级分类1-次级分类2-...-唯一编号
- * 例如: 机器人-灵巧手-L30-LHT10
- * 注：最后的唯一编号是物品在物理世界中自带的编号
+ * 生成完整索引（已弃用 - 现在由用户手动输入唯一编号）
+ * 格式: 分类路径-唯一编号
+ * 例如: 机器人-灵巧手-L30-LHT3000
+ *
+ * 概念说明：
+ * - 唯一编号: LHT3000（物品出厂编号或物理标签）
+ * - 完整索引: 机器人-灵巧手-L30-LHT3000（分类路径 + 唯一编号）
  */
 async function generateUniqueCode(categoryId, model = '') {
   try {
@@ -77,8 +80,28 @@ async function isCodeUnique(code) {
   return rows[0].count === 0;
 }
 
+/**
+ * 生成完整索引（分类路径 + 唯一编号）
+ * @param {number} categoryId - 分类ID
+ * @param {string} uniqueCode - 唯一编号（例如: LHT3000）
+ * @returns {string} 完整索引（例如: 机器人-灵巧手-L30-LHT3000）
+ */
+async function generateFullIndex(categoryId, uniqueCode) {
+  try {
+    const categoryPath = await getCategoryPath(categoryId);
+    if (uniqueCode) {
+      return [...categoryPath, uniqueCode].join('-');
+    }
+    return categoryPath.join('-');
+  } catch (error) {
+    console.error('生成完整索引失败:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   generateUniqueCode,
   getCategoryPath,
-  isCodeUnique
+  isCodeUnique,
+  generateFullIndex
 };

@@ -441,7 +441,6 @@ function displayItems(items) {
       <td>${item.unique_code || 'N/A'}</td>
       <td>${item.item_name}</td>
       <td>${item.category_name}</td>
-      <td>${item.model || '-'}</td>
       <td>${item.current_quantity}</td>
       <td><span class="badge ${getStatusBadgeClass(item.status)}">${getStatusName(item.status)}</span></td>
       <td>
@@ -911,12 +910,8 @@ async function showAddItemModal() {
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>物品名称 *</label>
-                <input type="text" id="item-name" required>
-              </div>
-              <div class="form-group">
-                <label>型号</label>
-                <input type="text" id="item-model">
+                <label>物品名称</label>
+                <input type="text" id="item-name" placeholder="可选，未填写则使用完整索引（分类路径-唯一编号）">
               </div>
             </div>
             <div class="form-row">
@@ -928,8 +923,8 @@ async function showAddItemModal() {
             </div>
             <div class="form-row full" id="unique-code-row">
               <div class="form-group">
-                <label>唯一编号 * <small>（格式：一级分类-次级分类-型号-唯一编号，如：机器人-灵巧手-L30-LHT10，最后的唯一编号是物品在物理世界中自带的编号）</small></label>
-                <input type="text" id="item-unique-code" required placeholder="例如：机器人-灵巧手-L30-LHT10">
+                <label>唯一编号 * <small>（物品出厂编号或标签，如：LHT3000。系统会自动生成完整索引：分类路径-唯一编号）</small></label>
+                <input type="text" id="item-unique-code" required placeholder="例如：LHT3000">
               </div>
             </div>
             <div class="form-row full" id="stock-input-row" style="display: none;">
@@ -1134,7 +1129,6 @@ async function submitAddItem() {
   const categoryId = level3 || level2 || level1;
 
   const itemName = document.getElementById('item-name').value;
-  const model = document.getElementById('item-model').value;
   const isStackable = document.getElementById('item-stackable').checked;
   const uniqueCode = document.getElementById('item-unique-code').value;
   const initialStock = document.getElementById('item-initial-stock').value;
@@ -1142,8 +1136,8 @@ async function submitAddItem() {
   const specification = document.getElementById('item-specification').value;
   const description = document.getElementById('item-description').value;
 
-  if (!categoryId || !itemName) {
-    showMessage('请填写必填项', 'error');
+  if (!categoryId) {
+    showMessage('请选择分类', 'error');
     return;
   }
 
@@ -1162,8 +1156,7 @@ async function submitAddItem() {
       method: 'POST',
       body: JSON.stringify({
         categoryId: parseInt(categoryId),
-        itemName,
-        model: model || null,
+        itemName: itemName || null,  // 后端会自动生成完整索引
         isStackable,
         uniqueCode: isStackable ? null : uniqueCode,
         initialStock: isStackable ? parseInt(initialStock) : (inStock ? 1 : 0),
@@ -1333,13 +1326,8 @@ async function showInboundModal() {
             </div>
 
             <div class="form-group">
-              <label>物品名称 *</label>
-              <input type="text" id="inbound-item-name" placeholder="例如: Dell XPS 15">
-            </div>
-
-            <div class="form-group">
-              <label>型号</label>
-              <input type="text" id="inbound-item-model" placeholder="例如: XPS 15 9500">
+              <label>物品名称</label>
+              <input type="text" id="inbound-item-name" placeholder="可选，未填写则使用完整索引">
             </div>
 
             <div class="form-group">
@@ -1549,11 +1537,10 @@ async function submitInbound() {
       // Unique code mode: Create new item with initial inbound
       const uniqueCode = document.getElementById('inbound-unique-code').value.trim();
       const itemName = document.getElementById('inbound-item-name').value.trim();
-      const model = document.getElementById('inbound-item-model').value.trim();
       const specification = document.getElementById('inbound-item-spec').value.trim();
 
-      if (!uniqueCode || !itemName) {
-        showMessage('请填写唯一编号和物品名称', 'error');
+      if (!uniqueCode) {
+        showMessage('请填写唯一编号', 'error');
         return;
       }
 
@@ -1575,9 +1562,8 @@ async function submitInbound() {
           method: 'POST',
           body: JSON.stringify({
             uniqueCode,
-            itemName,
+            itemName: itemName || null,  // 后端会自动生成完整索引
             categoryId: parseInt(categoryId),
-            model,
             specification,
             isStackable: false,
             initialStock: 1, // Unique code items always have quantity 1
@@ -1594,9 +1580,8 @@ async function submitInbound() {
             requestData: {
               mode: 'create_unique',
               uniqueCode,
-              itemName,
+              itemName: itemName || null,  // 后端会自动生成完整索引
               categoryId: parseInt(categoryId),
-              model,
               specification,
               isStackable: false,
               initialStock: 1,
@@ -1763,8 +1748,15 @@ async function showOutboundModal() {
 
               <div id="borrow-fields" style="display: none;">
                 <div class="form-group">
-                  <label>预计归还日期 *</label>
-                  <input type="date" id="expected-return-date">
+                  <label>归还期限 *</label>
+                  <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="return-date-mode" style="flex: 0 0 120px;">
+                      <option value="date">指定日期</option>
+                      <option value="long-term">长期借用</option>
+                    </select>
+                    <input type="date" id="expected-return-date" style="flex: 1;">
+                  </div>
+                  <small id="long-term-hint" style="display: none; color: #666;">长期借用无需归还日期，适用于长期使用的物品</small>
                 </div>
                 <p class="text-info" style="margin-top: 10px; font-size: 14px;">
                   借用人信息将自动使用您的账号信息（姓名、邮箱、手机号）
@@ -1937,13 +1929,29 @@ function setupOutboundCascadingCategories() {
   outboundTypeSelect.addEventListener('change', (e) => {
     const isBorrow = e.target.value === 'borrow';
     borrowFields.style.display = isBorrow ? 'block' : 'none';
-
-    // Set required attribute for expected return date only
-    const expectedReturnField = document.getElementById('expected-return-date');
-    if (expectedReturnField) {
-      expectedReturnField.required = isBorrow;
-    }
   });
+
+  // Return date mode change handler
+  const returnDateModeSelect = document.getElementById('return-date-mode');
+  const expectedReturnDateInput = document.getElementById('expected-return-date');
+  const longTermHint = document.getElementById('long-term-hint');
+
+  if (returnDateModeSelect && expectedReturnDateInput && longTermHint) {
+    returnDateModeSelect.addEventListener('change', (e) => {
+      const isLongTerm = e.target.value === 'long-term';
+
+      if (isLongTerm) {
+        expectedReturnDateInput.style.display = 'none';
+        expectedReturnDateInput.required = false;
+        expectedReturnDateInput.value = '';
+        longTermHint.style.display = 'block';
+      } else {
+        expectedReturnDateInput.style.display = 'block';
+        expectedReturnDateInput.required = true;
+        longTermHint.style.display = 'none';
+      }
+    });
+  }
 }
 
 // Switch between tabs in outbound modal
@@ -2027,9 +2035,11 @@ async function submitOutbound() {
   };
 
   if (outboundType === 'borrow') {
+    const returnDateMode = document.getElementById('return-date-mode').value;
     const expectedReturnDate = document.getElementById('expected-return-date').value;
 
-    if (!expectedReturnDate) {
+    // 验证归还日期（非长期借用时必填）
+    if (returnDateMode === 'date' && !expectedReturnDate) {
       showMessage('请填写预计归还日期', 'error');
       return;
     }
@@ -2038,7 +2048,9 @@ async function submitOutbound() {
     requestData.borrowerName = currentUser.username;
     requestData.borrowerPhone = currentUser.phone || '';
     requestData.borrowerEmail = currentUser.email;
-    requestData.expectedReturnDate = expectedReturnDate;
+
+    // 长期借用时不设置归还日期（设为null）
+    requestData.expectedReturnDate = returnDateMode === 'long-term' ? null : expectedReturnDate;
   }
 
   try {

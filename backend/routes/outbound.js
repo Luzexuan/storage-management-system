@@ -133,11 +133,11 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
     return res.status(400).json({ error: 'Outbound type must be transfer or borrow' });
   }
 
-  // Borrowing requires borrower information and expected return date
+  // Borrowing requires borrower information (expected return date is optional for long-term borrowing)
   if (outboundType === 'borrow') {
-    if (!borrowerName || !borrowerPhone || !borrowerEmail || !expectedReturnDate) {
+    if (!borrowerName || !borrowerPhone || !borrowerEmail) {
       return res.status(400).json({
-        error: 'Borrowing requires borrower name, phone, email and expected return date'
+        error: 'Borrowing requires borrower name, phone and email'
       });
     }
   }

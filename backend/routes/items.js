@@ -30,9 +30,9 @@ router.get('/', verifyToken, verifyActiveUser, async (req, res) => {
     }
 
     if (search) {
-      sql += ' AND (i.item_name LIKE ? OR i.unique_code LIKE ? OR i.model LIKE ?)';
+      sql += ' AND (i.item_name LIKE ? OR i.unique_code LIKE ?)';
       const searchTerm = `%${search}%`;
-      params.push(searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm);
     }
 
     // Get total count
@@ -113,15 +113,22 @@ router.get('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
 
 // Create new item
 router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
-  const { categoryId, itemName, model, specification, isStackable, description, uniqueCode, initialStock } = req.body;
+  const { categoryId, itemName, specification, isStackable, description, uniqueCode, initialStock } = req.body;
 
-  if (!categoryId || !itemName) {
-    return res.status(400).json({ error: 'Category and item name are required' });
+  if (!categoryId) {
+    return res.status(400).json({ error: 'Category is required' });
   }
 
   // Non-stackable items must have unique code
   if (!isStackable && !uniqueCode) {
     return res.status(400).json({ error: 'Non-stackable items must have unique code' });
+  }
+
+  // If itemName is not provided, generate full index as default name
+  let finalItemName = itemName;
+  if (!finalItemName) {
+    const { generateFullIndex } = require('../utils/codeGenerator');
+    finalItemName = await generateFullIndex(categoryId, uniqueCode);
   }
 
   // Parse initial stock
@@ -158,9 +165,9 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
 
     const [result] = await db.execute(
       `INSERT INTO items
-       (unique_code, category_id, item_name, model, specification, is_stackable, description, status, current_quantity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [uniqueCode || null, categoryId, itemName, model || null, specification || null, isStackable || false, description || null, initialStatus, stock]
+       (unique_code, category_id, item_name, specification, is_stackable, description, status, current_quantity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uniqueCode || null, categoryId, finalItemName, specification || null, isStackable || false, description || null, initialStatus, stock]
     );
 
     // Log operation
@@ -193,7 +200,7 @@ router.post('/', verifyToken, verifyActiveUser, async (req, res) => {
 // Update item information (admins can modify all fields, regular users can only modify some)
 router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
   const { itemId } = req.params;
-  const { itemName, model, specification, description } = req.body;
+  const { itemName, specification, description } = req.body;
   const isAdmin = req.user.role === 'admin';
 
   try {
@@ -204,10 +211,6 @@ router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
     if (itemName !== undefined) {
       updates.push(' item_name = ?');
       params.push(itemName);
-    }
-    if (model !== undefined) {
-      updates.push(' model = ?');
-      params.push(model);
     }
     if (specification !== undefined) {
       updates.push(' specification = ?');
@@ -235,7 +238,7 @@ router.put('/:itemId', verifyToken, verifyActiveUser, async (req, res) => {
       targetId: parseInt(itemId),
       operationDetail: {
         action: 'update',
-        updates: { itemName, model, specification, description }
+        updates: { itemName, specification, description }
       },
       ipAddress: getClientIP(req)
     });
