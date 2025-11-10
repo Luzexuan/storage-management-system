@@ -578,6 +578,44 @@ body.is-admin .section.admin-only.active {
   font-size: 0.85rem;
 }
 
+/* 展开/收起按钮 */
+.toggle-btn {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  margin-right: 0.5rem;
+  font-size: 0.9rem;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.toggle-btn:hover {
+  color: #333;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.toggle-btn.collapsed {
+  transform: rotate(-90deg);
+}
+
+.toggle-btn-placeholder {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin-right: 0.5rem;
+}
+
+/* 子分类容器 */
+.category-children {
+  margin-top: 0.5rem;
+  transition: all 0.3s ease;
+}
+
 .empty-message {
   text-align: center;
   color: #999;

@@ -2357,34 +2357,62 @@ async function loadCategories() {
   }
 }
 
-// 构建分类树HTML（带操作按钮）
+// 构建分类树HTML（带操作按钮和展开/收起功能）
 function buildCategoryTreeHTML(categories, level = 0) {
   let html = '<ul class="category-tree">';
 
   for (const cat of categories) {
     const indent = level * 20;
     const isAdmin = currentUser && currentUser.role === 'admin';
+    const hasChildren = cat.children && cat.children.length > 0;
+
+    // 为每个分类生成唯一ID
+    const categoryDomId = `category-${cat.category_id}`;
+    const childrenDomId = `children-${cat.category_id}`;
 
     html += `
       <li style="padding-left: ${indent}px">
         <div class="category-item">
+          ${hasChildren ? `
+            <span class="toggle-btn" onclick="toggleCategory('${childrenDomId}', this)">▽</span>
+          ` : `
+            <span class="toggle-btn-placeholder"></span>
+          `}
           <span class="category-name">${cat.category_name}</span>
           ${cat.description ? `<span class="category-desc">(${cat.description})</span>` : ''}
           ${isAdmin ? `
             <div class="category-actions">
-              <button class="btn btn-sm" onclick="showEditCategoryModal(${cat.category_id}, '${cat.category_name}', '${cat.description || ''}', ${cat.sort_order || 0})">编辑</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteCategory(${cat.category_id}, '${cat.category_name}')">删除</button>
-              <button class="btn btn-sm btn-secondary" onclick="showAddSubcategoryModal(${cat.category_id}, '${cat.category_name}')">添加子分类</button>
+              <button class="btn btn-sm" onclick="showEditCategoryModal(${cat.category_id}, '${cat.category_name.replace(/'/g, "\\'")}', '${(cat.description || '').replace(/'/g, "\\'")}', ${cat.sort_order || 0})">编辑</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteCategory(${cat.category_id}, '${cat.category_name.replace(/'/g, "\\'")}')">删除</button>
+              <button class="btn btn-sm btn-secondary" onclick="showAddSubcategoryModal(${cat.category_id}, '${cat.category_name.replace(/'/g, "\\'")}')">添加子分类</button>
             </div>
           ` : ''}
         </div>
-        ${cat.children && cat.children.length > 0 ? buildCategoryTreeHTML(cat.children, level + 1) : ''}
+        ${hasChildren ? `<div id="${childrenDomId}" class="category-children">${buildCategoryTreeHTML(cat.children, level + 1)}</div>` : ''}
       </li>
     `;
   }
 
   html += '</ul>';
   return html;
+}
+
+// 切换分类展开/收起状态
+function toggleCategory(childrenId, toggleBtn) {
+  const childrenElement = document.getElementById(childrenId);
+  if (!childrenElement) return;
+
+  if (childrenElement.style.display === 'none') {
+    // 展开
+    childrenElement.style.display = 'block';
+    toggleBtn.textContent = '▽';
+    toggleBtn.classList.remove('collapsed');
+  } else {
+    // 收起
+    childrenElement.style.display = 'none';
+    toggleBtn.textContent = '▷';
+    toggleBtn.classList.add('collapsed');
+  }
 }
 
 // 显示添加分类模态框
