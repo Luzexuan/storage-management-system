@@ -161,6 +161,9 @@ function showSection(sectionName) {
     case 'users':
       loadUsers();
       break;
+    case 'import-export':
+      loadImportExportPage();
+      break;
     case 'profile':
       loadProfile();
       break;
@@ -2490,6 +2493,44 @@ function ensureCategoryExpanded(childrenId) {
   }
 }
 
+// 确保从根节点到指定分类的整个路径都展开
+async function ensureCategoryPathExpanded(categoryId) {
+  try {
+    // 获取所有分类数据以便查找父级链
+    const data = await apiRequest('/categories');
+    const categories = data.categories;
+
+    // 构建分类ID到分类对象的映射（扁平化所有分类）
+    const categoryMap = {};
+    function flattenCategories(cats) {
+      cats.forEach(cat => {
+        categoryMap[cat.category_id] = cat;
+        if (cat.children && cat.children.length > 0) {
+          flattenCategories(cat.children);
+        }
+      });
+    }
+    flattenCategories(categories);
+
+    // 从当前分类向上查找所有父分类
+    const pathIds = [];
+    let currentId = categoryId;
+    while (currentId && categoryMap[currentId]) {
+      pathIds.push(currentId);
+      currentId = categoryMap[currentId].parent_id;
+    }
+
+    // 展开整个路径上的所有分类
+    pathIds.forEach(id => {
+      ensureCategoryExpanded(`children-${id}`);
+    });
+  } catch (error) {
+    console.error('设置分类路径展开失败:', error);
+    // 如果失败，至少展开直接父分类
+    ensureCategoryExpanded(`children-${categoryId}`);
+  }
+}
+
 // 显示添加分类模态框
 async function showAddCategoryModal() {
   const modalHTML = `
@@ -2606,8 +2647,8 @@ async function submitAddSubcategory() {
     showMessage('子分类创建成功！', 'success');
     closeModal('add-subcategory-modal');
 
-    // 确保父分类在重新加载后保持展开状态
-    ensureCategoryExpanded(`children-${parentId}`);
+    // 确保父分类及其所有祖先分类在重新加载后保持展开状态
+    await ensureCategoryPathExpanded(parseInt(parentId));
 
     loadCategories();
   } catch (error) {

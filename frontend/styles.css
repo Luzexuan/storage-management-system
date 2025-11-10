@@ -746,3 +746,92 @@ body.is-admin .section.admin-only.active {
   padding: 0.4rem 0.8rem;
   font-size: 0.875rem;
 }
+
+
+/* ========== 导入/导出页面样式 ========== */
+
+.import-export-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.import-export-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.import-export-card h3 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #333;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 0.5rem;
+}
+
+.import-export-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.export-group,
+.import-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.export-group.full-width,
+.import-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.export-group h4,
+.import-group h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: #666;
+  border-left: 3px solid #28a745;
+  padding-left: 0.5rem;
+}
+
+.import-group h4 {
+  border-left-color: #ffc107;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.warning-text {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 0.5rem;
+  margin: 0;
+  font-size: 0.9rem;
+  color: #856404;
+}
+
+/* 响应式布局 */
+@media (max-width: 1200px) {
+  .import-export-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .import-export-actions {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
