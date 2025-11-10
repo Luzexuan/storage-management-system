@@ -2352,8 +2352,34 @@ async function loadCategories() {
 
     const tree = buildCategoryTreeHTML(categories);
     container.innerHTML = tree;
+
+    // 恢复之前保存的展开/收起状态
+    restoreCategoryToggleStates();
   } catch (error) {
     showMessage('获取分类失败：' + error.message, 'error');
+  }
+}
+
+// 恢复分类展开/收起状态
+function restoreCategoryToggleStates() {
+  try {
+    const collapsedCategories = JSON.parse(localStorage.getItem('collapsedCategories') || '{}');
+
+    // 遍历所有需要收起的分类
+    for (const childrenId in collapsedCategories) {
+      if (collapsedCategories[childrenId]) {
+        const childrenElement = document.getElementById(childrenId);
+        const toggleBtn = document.querySelector(`[onclick*="${childrenId}"]`);
+
+        if (childrenElement && toggleBtn) {
+          childrenElement.style.display = 'none';
+          toggleBtn.textContent = '▷';
+          toggleBtn.classList.add('collapsed');
+        }
+      }
+    }
+  } catch (error) {
+    console.error('恢复分类状态失败:', error);
   }
 }
 
@@ -2370,11 +2396,17 @@ function buildCategoryTreeHTML(categories, level = 0) {
     const categoryDomId = `category-${cat.category_id}`;
     const childrenDomId = `children-${cat.category_id}`;
 
+    // 默认收起子分类（除了一级分类）
+    const defaultCollapsed = level > 0;
+    const toggleBtnText = defaultCollapsed ? '▷' : '▽';
+    const toggleBtnClass = defaultCollapsed ? 'collapsed' : '';
+    const childrenStyle = defaultCollapsed ? 'style="display: none;"' : '';
+
     html += `
       <li style="padding-left: ${indent}px">
         <div class="category-item">
           ${hasChildren ? `
-            <span class="toggle-btn" onclick="toggleCategory('${childrenDomId}', this)">▽</span>
+            <span class="toggle-btn ${toggleBtnClass}" onclick="toggleCategory('${childrenDomId}', this)">${toggleBtnText}</span>
           ` : `
             <span class="toggle-btn-placeholder"></span>
           `}
@@ -2388,7 +2420,7 @@ function buildCategoryTreeHTML(categories, level = 0) {
             </div>
           ` : ''}
         </div>
-        ${hasChildren ? `<div id="${childrenDomId}" class="category-children">${buildCategoryTreeHTML(cat.children, level + 1)}</div>` : ''}
+        ${hasChildren ? `<div id="${childrenDomId}" class="category-children" ${childrenStyle}>${buildCategoryTreeHTML(cat.children, level + 1)}</div>` : ''}
       </li>
     `;
   }
@@ -2402,7 +2434,9 @@ function toggleCategory(childrenId, toggleBtn) {
   const childrenElement = document.getElementById(childrenId);
   if (!childrenElement) return;
 
-  if (childrenElement.style.display === 'none') {
+  const isCollapsed = childrenElement.style.display === 'none';
+
+  if (isCollapsed) {
     // 展开
     childrenElement.style.display = 'block';
     toggleBtn.textContent = '▽';
@@ -2412,6 +2446,35 @@ function toggleCategory(childrenId, toggleBtn) {
     childrenElement.style.display = 'none';
     toggleBtn.textContent = '▷';
     toggleBtn.classList.add('collapsed');
+  }
+
+  // 保存展开/收起状态到 localStorage
+  saveCategoryToggleState(childrenId, !isCollapsed);
+}
+
+// 保存分类展开/收起状态
+function saveCategoryToggleState(childrenId, isCollapsed) {
+  try {
+    let collapsedCategories = JSON.parse(localStorage.getItem('collapsedCategories') || '{}');
+    if (isCollapsed) {
+      collapsedCategories[childrenId] = true;
+    } else {
+      delete collapsedCategories[childrenId];
+    }
+    localStorage.setItem('collapsedCategories', JSON.stringify(collapsedCategories));
+  } catch (error) {
+    console.error('保存分类状态失败:', error);
+  }
+}
+
+// 获取分类展开/收起状态
+function getCategoryToggleState(childrenId) {
+  try {
+    const collapsedCategories = JSON.parse(localStorage.getItem('collapsedCategories') || '{}');
+    return collapsedCategories[childrenId] === true;
+  } catch (error) {
+    console.error('读取分类状态失败:', error);
+    return false;
   }
 }
 
