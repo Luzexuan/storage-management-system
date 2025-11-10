@@ -2478,6 +2478,18 @@ function getCategoryToggleState(childrenId) {
   }
 }
 
+// 确保分类展开（用于新增子分类后保持父分类展开）
+function ensureCategoryExpanded(childrenId) {
+  try {
+    let collapsedCategories = JSON.parse(localStorage.getItem('collapsedCategories') || '{}');
+    // 从收起列表中删除该分类，确保其展开
+    delete collapsedCategories[childrenId];
+    localStorage.setItem('collapsedCategories', JSON.stringify(collapsedCategories));
+  } catch (error) {
+    console.error('设置分类展开状态失败:', error);
+  }
+}
+
 // 显示添加分类模态框
 async function showAddCategoryModal() {
   const modalHTML = `
@@ -2593,6 +2605,10 @@ async function submitAddSubcategory() {
 
     showMessage('子分类创建成功！', 'success');
     closeModal('add-subcategory-modal');
+
+    // 确保父分类在重新加载后保持展开状态
+    ensureCategoryExpanded(`children-${parentId}`);
+
     loadCategories();
   } catch (error) {
     showMessage('创建失败：' + error.message, 'error');
