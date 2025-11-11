@@ -47,6 +47,7 @@ const logRoutes = require('./routes/logs');
 const statsRoutes = require('./routes/stats');
 const approvalRoutes = require('./routes/approvals');
 const importExportRoutes = require('./routes/import-export');
+const calendarRoutes = require('./routes/calendar');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -58,6 +59,7 @@ app.use('/api/logs', logRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/approvals', approvalRoutes);
 app.use('/api', importExportRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // 健康检查
 app.get('/health', (req, res) => {
