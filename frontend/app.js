@@ -189,6 +189,11 @@ async function loadDashboard() {
     const logsEndpoint = isAdmin ? '/logs?limit=10' : `/logs?operatorId=${currentUser.userId}&limit=10`;
     const logsData = await apiRequest(logsEndpoint);
     displayRecentLogs(logsData.logs);
+
+    // Load calendar
+    if (typeof initCalendar === 'function') {
+      initCalendar();
+    }
   } catch (error) {
     showMessage('加载仪表盘失败: ' + error.message, 'error');
   }

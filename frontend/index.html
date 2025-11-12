@@ -129,6 +129,23 @@
             <h3>最近操作</h3>
             <div id="recent-logs"></div>
           </div>
+
+          <div class="section-content">
+            <h3>日历事件</h3>
+            <div class="calendar-container">
+              <div class="calendar-header">
+                <button class="btn btn-sm" onclick="previousMonth()">上月</button>
+                <h4 id="calendar-month-year"></h4>
+                <button class="btn btn-sm" onclick="nextMonth()">下月</button>
+                <button class="btn btn-primary btn-sm admin-only" onclick="showAddEventModal()">添加事件</button>
+              </div>
+              <div id="calendar-grid"></div>
+              <div class="calendar-events-list">
+                <h5>本月事件</h5>
+                <div id="calendar-events"></div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- 物品管理 -->
@@ -509,5 +526,6 @@
 
   <script src="app.js"></script>
   <script src="import-export.js"></script>
+  <script src="calendar.js"></script>
 </body>
 </html>

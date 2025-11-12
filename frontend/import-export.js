@@ -8,37 +8,53 @@ async function loadImportExportPage() {
     const categorySelect = document.getElementById('export-category-select');
     const itemsCategorySelect = document.getElementById('export-items-category-select');
 
+    if (!categorySelect || !itemsCategorySelect) {
+      console.error('无法找到分类选择器元素');
+      return;
+    }
+
     categorySelect.innerHTML = '<option value="">请选择分类</option>';
     itemsCategorySelect.innerHTML = '<option value="">请选择分类</option>';
 
-    categories.forEach(cat => {
-      const indent = '　'.repeat(cat.level);
-      const option1 = document.createElement('option');
-      option1.value = cat.category_id;
-      option1.textContent = indent + cat.category_name;
-      categorySelect.appendChild(option1);
+    if (!categories || categories.length === 0) {
+      console.warn('没有加载到分类数据');
+      categorySelect.innerHTML += '<option value="" disabled>暂无分类</option>';
+      itemsCategorySelect.innerHTML += '<option value="" disabled>暂无分类</option>';
+    } else {
+      categories.forEach(cat => {
+        const indent = '　'.repeat(Math.max(0, cat.level - 1));
+        const option1 = document.createElement('option');
+        option1.value = cat.category_id;
+        option1.textContent = indent + cat.category_name;
+        categorySelect.appendChild(option1);
 
-      const option2 = document.createElement('option');
-      option2.value = cat.category_id;
-      option2.textContent = indent + cat.category_name;
-      itemsCategorySelect.appendChild(option2);
-    });
+        const option2 = document.createElement('option');
+        option2.value = cat.category_id;
+        option2.textContent = indent + cat.category_name;
+        itemsCategorySelect.appendChild(option2);
+      });
+      console.log(`已加载 ${categories.length} 个分类到选择器`);
+    }
 
     // 加载用户选择器
     const usersData = await apiRequest('/users');
     const userSelect = document.getElementById('export-logs-user');
-    userSelect.innerHTML = '<option value="">全部用户</option>';
-    usersData.users.forEach(user => {
-      const option = document.createElement('option');
-      option.value = user.user_id;
-      option.textContent = user.username;
-      userSelect.appendChild(option);
-    });
+    if (userSelect) {
+      userSelect.innerHTML = '<option value="">全部用户</option>';
+      usersData.users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.user_id;
+        option.textContent = user.username;
+        userSelect.appendChild(option);
+      });
+      console.log(`已加载 ${usersData.users.length} 个用户到选择器`);
+    }
 
     // 设置文件输入监听器
     setupFileInputListeners();
   } catch (error) {
     console.error('加载导入/导出页面失败:', error);
+    showMessage('加载导入/导出页面失败: ' + error.message, 'error');
   }
 }
 
